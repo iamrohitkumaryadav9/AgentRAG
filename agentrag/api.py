@@ -13,6 +13,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from .config import settings
+from .evaluation import evaluate
 from .graph import run_query
 from .ingest import build_corpus
 from .llm import get_llm
@@ -44,14 +45,23 @@ class SourceRef(BaseModel):
     score: float
 
 
+class CitationRef(BaseModel):
+    source: str
+    position: int
+
+
 class QueryResponse(BaseModel):
     answer: str
+    citations: List[CitationRef]
+    confidence: float
     sources: List[SourceRef]
     grounded: bool
     grounding_score: float
     attempts: int
     pii_flags: List[str]
+    bad_citations: List[str]
     trace: List[str]
+    telemetry: dict
 
 
 def _get_vector_store() -> VectorStore:
@@ -85,13 +95,34 @@ def query(req: QueryRequest):
     store = _get_vector_store()
     result = run_query(store, req.question, llm=_state["llm"])
     guardrail = result.get("guardrail")
+    payload = result.get("payload")
+    metrics = result.get("metrics")
     sources = [SourceRef(source=r.chunk.source, score=r.score) for r in result.get("retrieved", [])]
+    citations = [CitationRef(source=c.source, position=c.position) for c in (payload.citations if payload else [])]
+
     return QueryResponse(
         answer=result.get("answer", ""),
+        citations=citations,
+        confidence=payload.confidence if payload else 0.0,
         sources=sources,
         grounded=guardrail.passed if guardrail else True,
         grounding_score=guardrail.grounding_score if guardrail else 1.0,
         attempts=result.get("attempts", 0),
         pii_flags=result.get("pii_flags", []),
+        bad_citations=result.get("bad_citations", []),
         trace=result.get("trace", []),
+        telemetry=metrics.as_dict() if metrics else {},
     )
+
+
+@app.post("/eval")
+def run_evaluation():
+    """Run the golden-set evaluation and return AI quality metrics.
+
+    Exposing this as an endpoint (not just a CI script) means the deployed
+    service can be re-scored against its own knowledge base at any time --
+    useful for catching quality drift after the corpus changes.
+    """
+    store = _get_vector_store()
+    report = evaluate(store, llm=_state["llm"])
+    return report["metrics"]

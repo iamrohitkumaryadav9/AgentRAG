@@ -37,3 +37,22 @@ def test_query_about_guardrails_is_grounded_in_responsible_ai_doc():
     sources = {r.chunk.source for r in result["retrieved"]}
     assert "responsible_ai.md" in sources
     assert result["guardrail"].passed
+
+
+def test_out_of_scope_query_is_refused_via_relevance_floor():
+    """Retrieval below the relevance floor must abstain, not synthesise."""
+    store = _built_store()
+    result = run_query(store, "What was Tesla's share price yesterday?", llm=ExtractiveLLM())
+
+    assert "don't have enough information" in result["answer"].lower()
+    assert result["payload"].confidence == 0.0
+    assert result["payload"].citations == []
+    assert any("refuse" in step for step in result["trace"])
+
+
+def test_in_scope_query_still_reaches_synthesizer():
+    store = _built_store()
+    result = run_query(store, "What is retrieval-augmented generation?", llm=ExtractiveLLM())
+
+    assert any("synthesizer" in step for step in result["trace"])
+    assert result["payload"].citations
