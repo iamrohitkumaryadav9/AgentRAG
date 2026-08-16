@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentrag"
+version = "0.2.0"
+description = "A self-correcting multi-agent RAG assistant with guardrails, evaluation, and observability"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "Rohit Kumar" }]
+dependencies = [
+    "langgraph>=1.2,<2.0",
+    "langchain-core>=1.4,<2.0",
+    "fastapi>=0.115,<1.0",
+    "uvicorn>=0.30,<1.0",
+    "pydantic>=2.7,<3.0",
+    "python-dotenv>=1.0,<2.0",
+    "scikit-learn>=1.4,<2.0",
+    "numpy>=1.26,<3.0",
+    "pypdf>=4.0,<6.0",
+    "opentelemetry-api>=1.24",
+    "opentelemetry-sdk>=1.24",
+]
+
+[project.optional-dependencies]
+dense = ["sentence-transformers>=3.0", "faiss-cpu>=1.8"]
+gemini = ["google-genai>=0.3"]
+dev = ["pytest>=8.0,<9.0"]
+
+[project.scripts]
+agentrag = "cli:main"
+
+[tool.setuptools]
+packages = ["agentrag"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
