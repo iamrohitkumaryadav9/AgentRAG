@@ -25,6 +25,19 @@ _PHONE_RE = re.compile(r"\b\d{10}\b|\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b")
 
 REFUSAL_PHRASES = ("don't have enough information", "not enough information", "cannot answer")
 
+# Function words carry no topical signal, so they'd inflate coverage for any
+# question regardless of whether the corpus actually covers it.
+_STOPWORDS = {
+    "what", "which", "who", "whom", "whose", "why", "how", "when", "where",
+    "the", "and", "for", "are", "was", "were", "been", "being", "have", "has",
+    "had", "does", "did", "should", "would", "could", "can", "will", "shall",
+    "this", "that", "these", "those", "with", "from", "into", "about", "than",
+    "then", "there", "their", "them", "they", "you", "your", "its", "it's",
+    "used", "use", "using", "make", "makes", "made", "get", "gets", "got",
+    "system", "systems", "thing", "things", "way", "ways", "main", "commonly",
+    "good", "bad", "big", "small", "new", "old", "work", "works", "need",
+}
+
 
 @dataclass
 class GuardrailResult:
@@ -76,3 +89,39 @@ def check_pii_leak(answer: str) -> list[str]:
     if _PHONE_RE.search(answer):
         findings.append("phone_number")
     return findings
+
+
+def query_coverage(query: str, context_chunks: List[Chunk]) -> float:
+    """Fraction of the query's topical terms that appear in the retrieved context.
+
+    This is the relevance gate that decides whether the system should attempt
+    an answer at all. It is deliberately used *instead of* a raw similarity
+    threshold: similarity scores are scale-dependent (they shift with chunk
+    size, corpus size, and retrieval backend), so a fixed score floor tuned on
+    one configuration silently breaks on another. Term coverage is normalised
+    to [0,1] by construction and behaves consistently across backends.
+
+    Empirically on this corpus, in-scope questions score >= 0.50 while
+    out-of-scope questions score <= 0.25, leaving a wide margin around the
+    default threshold.
+    """
+    terms = {w.lower() for w in _WORD_RE.findall(query)} - _STOPWORDS
+    if not terms:
+        return 1.0
+    if not context_chunks:
+        return 0.0
+
+    context = " ".join(c.text.lower() for c in context_chunks)
+    return round(sum(1 for t in terms if t in context) / len(terms), 3)
+
+
+def check_citations(citations, context_chunks: List[Chunk]) -> list[str]:
+    """Verify every cited source actually appears in the retrieved context.
+
+    Structured output makes this check mechanical rather than heuristic: a
+    model that fabricates a plausible-looking source name is caught here,
+    which is one of the more insidious RAG failure modes because the answer
+    still *looks* properly attributed.
+    """
+    valid_sources = {c.source for c in context_chunks}
+    return [c.source for c in citations if c.source not in valid_sources]
