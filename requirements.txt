@@ -1,0 +1,19 @@
+langgraph>=1.2,<2.0
+langchain-core>=0.3,<0.4
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30,<1.0
+pydantic>=2.7,<3.0
+python-dotenv>=1.0,<2.0
+scikit-learn>=1.4,<2.0
+numpy>=1.26,<3.0
+pypdf>=4.0,<6.0
+
+# Optional: dense semantic retrieval (auto-fallback to TF-IDF if unavailable)
+sentence-transformers>=3.0
+faiss-cpu>=1.8
+
+# Optional: real LLM generation via Gemini (auto-fallback to offline extractive LLM)
+google-genai>=0.3
+
+# Dev / testing
+pytest>=8.0,<9.0
