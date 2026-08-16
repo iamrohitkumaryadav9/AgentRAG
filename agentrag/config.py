@@ -34,6 +34,18 @@ class Settings:
     max_synthesis_attempts: int = int(os.getenv("AGENTRAG_MAX_ATTEMPTS", "2"))
     grounding_threshold: float = float(os.getenv("AGENTRAG_GROUNDING_THRESHOLD", "0.18"))
 
+    # Relevance gate: how much of the question must the retrieved context
+    # actually cover before the system will attempt an answer? Below this, the
+    # corpus doesn't cover the question and the correct behaviour is to refuse
+    # rather than synthesise from incidental keyword matches.
+    #
+    # Added after the eval harness showed the pipeline confabulating on
+    # deliberately out-of-scope questions (refusal accuracy was 50%). A raw
+    # similarity floor was tried first and rejected: it is scale-dependent and
+    # broke when chunk size changed. See guardrails.query_coverage.
+    min_query_coverage: float = float(os.getenv("AGENTRAG_MIN_QUERY_COVERAGE", "0.40"))
+    min_retrieval_score: float = float(os.getenv("AGENTRAG_MIN_RETRIEVAL_SCORE", "0.02"))
+
     # Storage
     docs_dir: str = os.getenv("AGENTRAG_DOCS_DIR", "data/sample_docs")
     index_dir: str = os.getenv("AGENTRAG_INDEX_DIR", ".index")
