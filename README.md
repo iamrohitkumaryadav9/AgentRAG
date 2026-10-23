@@ -121,29 +121,39 @@ backends (reproduce with `python scripts/run_eval.py`):
 | Keyword recall | 80.0% |
 | Refusal accuracy (out-of-scope) | 100.0% |
 | Citation validity | 100.0% |
-| Latency p50 / p95 | ~14 ms / ~15 ms |
-| Mean est. tokens per query | 610 |
+| Latency p50 / p95 | ~12 ms / 14–50 ms (three runs) |
+| Mean est. tokens per query | 609 |
+
+The quality metrics are identical on the `tfidf`, `bm25` and `hybrid` backends (the golden set is 12 questions over a
+10-chunk corpus, so it checks the pipeline and refusal behaviour but cannot rank retrievers; see the SciFact
+ablation below for that). Latency above is for `bm25`.
 
 ## Retrieval ablation (BEIR SciFact)
 
 The 12-question golden set above checks the pipeline; it cannot rank retrieval strategies. For that, the
 repo includes an ablation on the public **BEIR SciFact** benchmark (5,183 abstracts, 300 test claims):
 
-| System | nDCG@10 | Recall@5 | Recall@100 | Latency p50 (ms) |
-| --- | --- | --- | --- | --- |
-| TF-IDF (the app's previous default) | 0.596 | 0.667 | 0.892 | 49 |
-| BM25 | 0.670 | 0.728 | 0.886 | 18 |
-| Dense: all-MiniLM-L6-v2 | 0.645 | 0.738 | 0.925 | 18 |
-| Dense: bge-small-en-v1.5 | **0.713** | 0.759 | 0.942 | 32 |
-| Hybrid RRF: BM25 + MiniLM | 0.688 | 0.757 | 0.961 | 35 |
-| Hybrid RRF: BM25 + bge-small | 0.711 | **0.762** | **0.965** | 58 |
-| Hybrid (bge) + cross-encoder rerank | 0.695 | 0.748 | 0.965 | 6,159 |
+| System | nDCG@10 | Recall@5 | Recall@100 | p50 latency, sequential (ms) | Batched (ms/query) |
+| --- | --- | --- | --- | --- | --- |
+| TF-IDF (the app's previous default) | 0.596 | 0.667 | 0.892 | 63 | 63 |
+| BM25 | 0.670 | 0.728 | 0.886 | 15 | 16 |
+| Dense: all-MiniLM-L6-v2 | 0.645 | 0.738 | 0.925 | 19 | 10 |
+| Dense: bge-small-en-v1.5 | **0.713** | 0.759 | 0.942 | 40 | 22 |
+| Hybrid RRF: BM25 + MiniLM | 0.688 | 0.757 | 0.961 | 42 | 27 |
+| Hybrid RRF: BM25 + bge-small | 0.711 | **0.762** | **0.965** | 57 | 38 |
+| Hybrid (bge) + cross-encoder rerank | 0.695 | 0.748 | 0.965 | 6,263 | 5,796 |
+
+Latency: CPU only (4 cores), one query at a time with default threads, and batched for offline throughput. A true
+single-thread run is in the docs; repeat runs differ by up to ~30%, so read ratios, not exact milliseconds.
 
 - BM25 over TF-IDF is a clear gain (+0.074 nDCG@10, 95% CI [+0.046, +0.102]).
 - Hybrid (bge) beats BM25 by +0.041 [+0.018, +0.064], significant after multiple-comparison correction, but
   is **statistically indistinguishable from bge-small alone** on nDCG@10 (−0.002 [−0.029, +0.026]). What hybrid
   adds is deeper recall (Recall@100 0.965 vs 0.942).
-- The off-the-shelf MS MARCO cross-encoder did **not** help (−0.016, not significant) and costs ~6 s/query on CPU.
+- The off-the-shelf MS MARCO cross-encoder did **not** help (−0.016, not significant) and costs ~6 s/query on
+  CPU (batching barely helps: 5.8 s). Replicating the BEIR paper's own BM25 → cross-encoder setup gave 0.680
+  against the paper's 0.688; across both setups reranked quality sits at about 0.68–0.70 whether the first stage
+  scores 0.670 or 0.711, so a better first stage does not make this reranker pay off.
 - Metric code is validated against published BM25 figures and the MTEB scores of both dense models.
 
 Full tables, confidence intervals, caveats and reproduction steps: [docs/scifact_ablation.md](docs/scifact_ablation.md).
@@ -165,8 +175,8 @@ stays fast and download-free.
   protection against failure cases, not a measured gain in rank quality.
 - **What it does not buy.** Top-10 precision: hybrid ≈ bge-small (−0.002 [−0.029, +0.026]). bge-small alone is a
   defensible alternative if latency or the two-index footprint matters more than coverage.
-- **Cost.** About twice BM25's retrieval latency, plus a one-off ~130 MB model download. The BM25 fallback needs
-  no extra dependencies or downloads.
+- **Cost.** Roughly 3–4× BM25's per-query latency (57 ms versus 15 ms sequentially on this CPU; 38 ms per query
+  when batched), plus a one-off ~130 MB model download. The BM25 fallback needs no extra dependencies or downloads.
 
 Reproduce the numbers with `python scripts/run_complementarity.py`.
 
@@ -190,12 +200,12 @@ python cli.py "What is retrieval-augmented generation?"
 
 Sample output:
 
-Real output with the offline defaults (answer text wrapped for readability;
-timings vary by machine):
+Real output of a fresh `pip install -e ".[dev]"` install, where `auto` resolves to BM25 (answer text wrapped for
+readability; timings vary by machine; with `.[dense]` installed the first line reads `retrieval=hybrid-rrf`):
 
 ```
 Indexing 'data/sample_docs' ...
-Indexed 10 chunks  |  retrieval=tfidf  generation=extractive
+Indexed 10 chunks  |  retrieval=bm25  generation=extractive
 
 Q: What is retrieval-augmented generation?
 
@@ -211,22 +221,25 @@ Guardrail: PASSED  (grounding_score=1.0, sufficient overlap with retrieved conte
 Attempts: 1
 
 Sources:
-  - rag_systems.md (score=0.377)
-  - rag_systems.md (score=0.060)
-  - responsible_ai.md (score=0.024)
+  - rag_systems.md (score=6.495)
+  - rag_systems.md (score=2.491)
+  - responsible_ai.md (score=1.024)
 
 Trace:
   * router -> retrieve
-  * retriever -> 3 chunk(s), top_score=0.3773, coverage=1.0
+  * retriever -> 3 chunk(s), top_score=6.4953, coverage=1.0
   * synthesizer -> draft #1 via extractive
   * critic -> passed=True score=1.0 (sufficient overlap with retrieved context)
 
-Telemetry (total 38.04 ms, ~693 tokens):
-  * router: 0.12 ms
-  * retriever: 37.22 ms
-  * synthesizer: 0.28 ms
-  * critic: 0.42 ms
+Telemetry (total 3.02 ms, ~693 tokens):
+  * router: 0.28 ms
+  * retriever: 1.38 ms
+  * synthesizer: 0.54 ms
+  * critic: 0.82 ms
 ```
+
+(BM25 scores are unbounded relevance sums, not cosine similarities; the `hybrid` backend reports a normalised
+score in (0, 1].)
 
 The extractive generator stitches together the best-matching sentences, so
 answers can include raw markdown headings and read choppily -- that is the

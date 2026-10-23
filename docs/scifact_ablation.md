@@ -5,17 +5,56 @@ with confidence intervals on every headline difference. Everything here is repro
 
 ## Results
 
-| System | nDCG@10 | MRR@10 | Recall@5 | Recall@50 | Recall@100 | Latency p50 / p95 (ms) |
-| --- | --- | --- | --- | --- | --- | --- |
-| TF-IDF (the app's current retriever) | 0.596 | 0.553 | 0.667 | 0.870 | 0.892 | 49 / 62 |
-| BM25 | 0.670 | 0.639 | 0.728 | 0.876 | 0.886 | 18 / 43 |
-| Dense: all-MiniLM-L6-v2 | 0.645 | 0.605 | 0.738 | 0.892 | 0.925 | 18 / 25 |
-| Dense: bge-small-en-v1.5 | 0.713 | 0.682 | 0.759 | 0.925 | 0.942 | 32 / 43 |
-| Hybrid RRF: BM25 + MiniLM | 0.688 | 0.653 | 0.757 | 0.935 | 0.961 | 35 / 55 |
-| Hybrid RRF: BM25 + bge-small | 0.711 | 0.682 | 0.762 | 0.947 | 0.965 | 58 / 100 |
-| Hybrid (bge) + cross-encoder rerank | 0.695 | 0.664 | 0.748 | 0.947 | 0.965 | 6,159 / 8,063 |
+| System | nDCG@10 | MRR@10 | Recall@5 | Recall@50 | Recall@100 |
+| --- | --- | --- | --- | --- | --- |
+| TF-IDF (the app's previous default) | 0.596 | 0.553 | 0.667 | 0.870 | 0.892 |
+| BM25 | 0.670 | 0.639 | 0.728 | 0.876 | 0.886 |
+| Dense: all-MiniLM-L6-v2 | 0.645 | 0.605 | 0.738 | 0.892 | 0.925 |
+| Dense: bge-small-en-v1.5 | 0.713 | 0.682 | 0.759 | 0.925 | 0.942 |
+| Hybrid RRF: BM25 + MiniLM | 0.688 | 0.653 | 0.757 | 0.935 | 0.961 |
+| Hybrid RRF: BM25 + bge-small | 0.711 | 0.682 | 0.762 | 0.947 | 0.965 |
+| Hybrid (bge) + cross-encoder rerank | 0.695 | 0.664 | 0.748 | 0.947 | 0.965 |
 
-Raw numbers: [results/scifact_summary.json](results/scifact_summary.json).
+Raw numbers: [results/scifact_summary.json](results/scifact_summary.json) (its latency fields come from the
+first ablation run; the latency section below supersedes them).
+
+## Latency
+
+Measured on an Intel Core i5-10210U (4 cores / 8 threads), CPU only, Python 3.14.6, PyTorch 2.14.1+cpu, with
+`scripts/run_latency.py`. Three execution modes, with the same retrieval results in all of them (nDCG@10
+identical to four decimals, so batching changes speed, not answers):
+
+| System | Queries | Sequential, 1 thread: p50 / p95 | Sequential, default threads: p50 / p95 | Batched, default threads: ms per query (queries/s) |
+| --- | --- | --- | --- | --- |
+| TF-IDF | 300 | 58 / 70 ms | 63 / 91 ms | 63 (15.8) |
+| BM25 | 300 | 15 / 29 ms | 15 / 29 ms | 16 (60.6) |
+| Dense: MiniLM | 300 | 20 / 27 ms | 19 / 24 ms | 10 (102.0) |
+| Dense: bge-small | 300 | 45 / 60 ms | 40 / 51 ms | 22 (45.5) |
+| Hybrid: BM25 + MiniLM | 300 | 39 / 62 ms | 42 / 66 ms | 27 (37.7) |
+| Hybrid: BM25 + bge-small | 300 | 62 / 92 ms | 57 / 89 ms | 38 (26.2) |
+| Hybrid (bge) + cross-encoder | 30 | 10,584 / 12,670 ms | 6,263 / 8,103 ms | 5,796 (0.2) |
+
+- **What each mode means.** "Sequential" is one query at a time, which is what serving a single request looks
+  like. "Default threads" is PyTorch's 4 intra-op threads and FAISS's 8 OpenMP threads. "1 thread" limits both
+  libraries to one thread. "Batched" encodes all queries in batches and runs one FAISS search (and, for the
+  reranker, one cross-encoder pass over every query–candidate pair); it is the offline throughput number,
+  reported as amortised time per query.
+- **My first latency numbers were mislabelled.** The earlier version of this document called the sequential
+  figures "single-threaded". They were not: PyTorch and FAISS were using their default 4 and 8 threads. The
+  true single-thread column above is new.
+- **Thread count barely matters for the small encoders** (within about ±15%, which is also the noise level).
+  It matters only for the reranker, which is 1.7× slower on one thread.
+- **Batching roughly doubles dense throughput** (MiniLM 1.9×, bge-small 1.8×, hybrid 1.5–1.6×), because
+  encoding many queries at once amortises per-call overhead. BM25 and TF-IDF do not benefit: their scoring
+  loops are single-threaded Python/NumPy and were not parallelised.
+- **The cross-encoder is compute-bound.** Batching gains only 1.08×; it costs about 5.8 s per query even in
+  bulk (50 pairs of up to 512 tokens each): about 110× the hybrid retriever's per-query time sequentially
+  and about 150× batched. This is the cost of a gain that, on this benchmark, did not materialise.
+- **The reranker row uses 30 queries**, not 300, because a single-thread run over 300 would take hours; its
+  percentiles are therefore rougher. Its nDCG@10 on those 30 (0.709) is not comparable with the 300-query figure.
+- **Run-to-run noise is large.** The sequential default-thread measurements differ from my first ablation run
+  by up to 29% for the same configuration (TF-IDF: 49 ms then 63 ms; bge-small: 32 then 40 ms). Use ratios and
+  orders of magnitude, not exact milliseconds.
 
 ## Are the differences real? (paired bootstrap on per-query nDCG@10)
 
@@ -36,7 +75,9 @@ pairs at once, so headline comparisons are not cherry-picked from a larger famil
 | Rerank vs Hybrid (bge) | −0.016 | [−0.045, +0.014] | 0.2978 | 0.9720 |
 | Rerank vs bge-small | −0.017 | [−0.045, +0.011] | 0.2430 | 0.9720 |
 
-All 21 pairs: [results/scifact_significance.json](results/scifact_significance.json).
+All 21 pairs: [results/scifact_significance.json](results/scifact_significance.json). The BEIR-paper
+replication (item 5 below) is deliberately outside this 21-pair family, so adding a sanity check never changes
+the corrected p-values of the headline comparisons; it is reported uncorrected as a single pre-declared test.
 
 ## What the numbers support
 
@@ -53,12 +94,30 @@ All 21 pairs: [results/scifact_significance.json](results/scifact_significance.j
 4. **The model matters more than the fusion.** bge-small beats MiniLM by +0.068 (Holm p = 0.002);
    fusing BM25 into MiniLM helps it (+0.043, Holm p = 0.043, a marginal result) but it stays numerically
    below bge-small (0.688 vs 0.713; I did not single that pair out for discussion).
-5. **The cross-encoder rerank did not help and is very expensive.** It scored −0.016 nDCG@10 versus its own
-   first stage (not significant: [−0.045, +0.014]) at a median of 6.2 s per query on CPU, about 105× the
-   hybrid's 58 ms. Its Recall@50 and @100 equal the first stage's by construction (it only reorders the top
-   50). I did not test why. A plausible but unverified reason is domain shift: the model
-   (`cross-encoder/ms-marco-MiniLM-L-6-v2`) was trained on web-search queries, and SciFact queries are
-   scientific claims. A domain-appropriate reranker, or a larger one, might behave differently.
+5. **The cross-encoder rerank did not help, and the result is consistent with the BEIR paper.** On top of the
+   hybrid it scored −0.016 nDCG@10 versus its own first stage (not significant: [−0.045, +0.014]). To check
+   that this is not an implementation problem, I replicated the paper's own configuration (BM25 top-100 →
+   the same 6-layer MS MARCO MiniLM cross-encoder):
+
+   | Setup | First-stage nDCG@10 | After reranking | Change |
+   | --- | --- | --- | --- |
+   | BEIR paper: BM25 → cross-encoder, top-100 | 0.665 | 0.688 | +0.023 |
+   | This repo, same setup | 0.670 | 0.680 | +0.010 [−0.020, +0.040] (not significant) |
+   | This repo: hybrid (BM25 + bge-small) → cross-encoder, top-50 | 0.711 | 0.695 | −0.016 [−0.045, +0.014] (not significant) |
+
+   The paper's figures are in its main results table ([Thakur et al., BEIR](https://arxiv.org/abs/2104.08663),
+   page 7: SciFact BM25 0.665, BM25+CE 0.688; I read them from the paper, not a secondary source). My
+   replication lands 0.008 below the paper's 0.688; its gain over my BM25 is smaller than the paper's, though
+   the interval includes the paper's +0.023. I did not investigate the gap (candidates: the first-stage BM25
+   implementation, input formatting, truncation).
+
+   **The pattern: reranked quality sits at about 0.68–0.70 whether the first stage scores 0.670 or 0.711.** A
+   weak first stage gains a little; a strong one gives some back. With this reranker, the ceiling on SciFact
+   appears to be set by the reranker, not by candidate quality, so a better first stage does not make it pay
+   off. That is a description of three data points, not a demonstrated mechanism; I have not tested why an
+   MS MARCO cross-encoder plateaus here. (An earlier draft suggested domain shift. That was untested, so it
+   has been removed.) Its Recall@50 and @100 equal the first stage's by construction, since it only reorders
+   the top of the list. Cost is covered in the Latency section above.
 
 ## Reproducing and validating the setup
 
@@ -72,13 +131,27 @@ All 21 pairs: [results/scifact_significance.json](results/scifact_significance.j
     Recall@100 = 0.925, MRR@10 = 0.6047. Mine: 0.6451, 0.7379, 0.925, 0.6047.
   - All eight values agree to within 0.001; the largest gap is bge-small Recall@5 (0.7590 vs 0.7598). That
     supports the metric code and the encoding setup being correct.
+- **The shipped code scores like the benchmarked code.** The app's own backends (not the benchmark's
+  re-implementations) were run through the same harness:
+
+  | App backend | nDCG@10 | Recall@100 | Benchmark counterpart | p50 latency |
+  | --- | --- | --- | --- | --- |
+  | `bm25` (scikit-learn/scipy, Lucene-style idf) | 0.6694 | 0.8859 | `rank_bm25`: 0.6701 / 0.8859 | 0.5 ms (vs 15 ms) |
+  | `hybrid` (BM25 + bge-small, RRF) | 0.7103 | 0.9650 | benchmark hybrid: 0.7110 / 0.9650 | 58 ms |
+
+  The ≤ 0.001 nDCG differences come from the idf variant. The app's BM25 is also much faster because it
+  precomputes per-term weights; that speed-up does not carry over to the hybrid, whose time is dominated by
+  encoding the query (the app's hybrid was a single sequential run, with the usual run-to-run noise).
 - Metric definitions have hand-computed unit tests (`tests/test_bench_metrics.py`).
 
 ```bash
 pip install -e ".[bench]"                       # pinned: torch, sentence-transformers, faiss-cpu, rank-bm25
 python scripts/run_ablation.py --systems tfidf,bm25,minilm,bge-small,hybrid-minilm,hybrid-bge,hybrid-bge-rerank
+python scripts/run_ablation.py --systems bm25-rerank100      # replication of the BEIR paper's BM25+CE
 python scripts/run_significance.py
 python scripts/run_error_analysis.py
+python scripts/run_latency.py                                # three execution modes
+python scripts/run_complementarity.py
 ```
 
 The first run downloads SciFact and the model weights; encoding the corpus on CPU took about 7 minutes
@@ -102,13 +175,24 @@ The first run downloads SciFact and the model weights; encoding the corpus on CP
 
 - **One dataset, 300 queries.** SciFact is small, scientific, and claim-based. Rankings of these systems
   may differ on other domains; it says nothing about the app's own three-document sample corpus.
-- **Latency is rough.** Single-threaded queries on one CPU-only Windows laptop, after a 5-query warm-up.
-  Repeat runs varied by roughly ±20% (BM25 p50 measured 14.6 ms and 17.9 ms in two runs), and hybrid
-  latency is the *sum* of its parts because the retrievers run sequentially. Use the ratios, not the
-  absolute milliseconds.
+- **Latency is rough.** One CPU-only Windows laptop, after a 5-query warm-up; repeat runs differ by up to
+  about 30%. Hybrid latency is the *sum* of its parts because the retrievers run sequentially in this code.
+  No GPU numbers. See the Latency section for modes and caveats.
 - **Defaults, not tuning.** BM25 parameters, the RRF constant (60) and the rerank depth (50) were not
   tuned. Weighted fusion or a different constant could change the hybrid results.
-- **The app is unchanged.** `AGENTRAG_VECTOR_BACKEND=auto` still prefers MiniLM and falls back to TF-IDF.
-  This study suggests BM25 or bge-small would be better defaults; that change has not been made.
+- **The app default follows this study** (`auto` → hybrid BM25 + bge-small, falling back to BM25). That is a
+  judgement from recall depth and complementary failure modes, not from a significant nDCG@10 gain over
+  bge-small alone; see the rationale in the README. The app's BM25 uses Lucene-style idf, whereas the
+  benchmark's BM25 used `rank_bm25`; the app's own classes were run through the same harness (see below).
 - **Failure analysis:** see [scifact_error_analysis.md](scifact_error_analysis.md) for the 20 queries where
   hybrid loses to BM25.
+
+## Future work
+
+- **Weighted or tuned fusion, without leaking the test set.** Weighted RRF, the RRF constant, and the rerank
+  depth should be tuned on SciFact's **train** split (809 claims in the original release, with relevance
+  judgments in the BEIR download's `qrels/train.tsv`), chosen once, and then evaluated a single time on the
+  300 test queries. Tuning on the test queries would leak and inflate the result, which is why it was not done
+  here.
+- A reranker trained or fine-tuned for scientific claims, and a significance test on the Recall@k
+  differences.

@@ -145,5 +145,12 @@
   "ci_high": 0.09238739426149484,
   "p_value": 0.025,
   "p_holm": 0.25
+ },
+ "bm25-rerank100 vs bm25": {
+  "mean_diff": 0.009918997231099048,
+  "ci_low": -0.02016999458925067,
+  "ci_high": 0.04012226520450351,
+  "p_value": 0.5106,
+  "family": "validation (uncorrected)"
  }
 }

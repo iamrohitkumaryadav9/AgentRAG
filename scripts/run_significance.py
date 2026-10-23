@@ -22,6 +22,14 @@ from agentrag.bench.stats import holm_adjust, paired_bootstrap
 RESULTS = Path("docs/results")
 METRIC = "ndcg@10"
 
+# The ablation family that Holm correction is applied across. Validation runs
+# (e.g. the BEIR BM25+CE replication) are deliberately outside it, so adding a
+# sanity check never changes the corrected p-values of the headline comparisons.
+FAMILY = ("tfidf", "bm25", "minilm", "bge-small", "hybrid-minilm", "hybrid-bge", "hybrid-bge-rerank")
+# One pre-declared extra comparison, reported without correction: does the cross-encoder's
+# gain over BM25 (the BEIR paper's BM25+CE configuration) replicate?
+VALIDATION = [("bm25-rerank100", "bm25")]
+
 # Declared up front, not chosen after looking at the numbers.
 PRIMARY = [
     ("bm25", "tfidf"),
@@ -39,8 +47,8 @@ PRIMARY = [
 
 def main() -> int:
     per_query = json.loads((RESULTS / "scifact_per_query.json").read_text(encoding="utf-8"))
-    systems = sorted(per_query)
-    qids = sorted(next(iter(per_query.values())))
+    systems = sorted(s for s in FAMILY if s in per_query)
+    qids = sorted(per_query[systems[0]])
     scores = {s: [per_query[s][q][METRIC] for q in qids] for s in systems}
 
     pairs = list(itertools.combinations(systems, 2))
@@ -74,6 +82,15 @@ def main() -> int:
                   f"| {t['p_value']:.4f} | {t['p_holm']:.4f} |")
 
     out = {f"{a} vs {b}": t for (a, b), t in tests.items()}
+
+    print("\nValidation comparison (outside the Holm family, uncorrected):")
+    for a, b in VALIDATION:
+        if a in per_query and b in per_query:
+            t = paired_bootstrap([per_query[a][q][METRIC] for q in qids], [per_query[b][q][METRIC] for q in qids])
+            print(f"| {a} vs {b} | {t['mean_diff']:+.4f} | [{t['ci_low']:+.4f}, {t['ci_high']:+.4f}] "
+                  f"| {t['p_value']:.4f} | n/a |")
+            out[f"{a} vs {b}"] = {**t, "family": "validation (uncorrected)"}
+
     (RESULTS / "scifact_significance.json").write_text(json.dumps(out, indent=1), encoding="utf-8")
     return 0
 
