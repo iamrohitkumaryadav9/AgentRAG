@@ -46,9 +46,9 @@ class RateLimitError(RuntimeError):
 
 
 class InvalidModelOutput(RuntimeError):
-    def __init__(self, message: str, raw: str) -> None:
+    def __init__(self, message: str, raw: str, responses: tuple = (), api_calls: int = 0) -> None:
         super().__init__(message)
-        self.raw = raw
+        self.raw, self.responses, self.api_calls = raw, responses, api_calls
 
 
 class BudgetExceeded(RuntimeError):
@@ -76,6 +76,7 @@ class CallResult:
     response: CachedResponse
     from_cache: bool
     api_calls: int  # requests actually sent for this result (0 on a cache hit; 2 if a repair was needed)
+    responses: tuple[CachedResponse, ...] = ()  # every response involved, including a failed first attempt
 
     @property
     def blocked(self) -> bool:
@@ -210,9 +211,9 @@ class GeminiClient:
         """Return the parsed response, from cache when this exact request was answered before."""
         first, cached, calls = self._request(prompt, schema, prompt_version, label, attempt=0)
         if first.blocked:
-            return CallResult(None, first, cached, calls)
+            return CallResult(None, first, cached, calls, (first,))
         try:
-            return CallResult(parse_model_json(schema, first.text), first, cached, calls)
+            return CallResult(parse_model_json(schema, first.text), first, cached, calls, (first,))
         except ValidationError as err:
             problem = str(err).splitlines()[0][:200]
 
@@ -222,13 +223,16 @@ class GeminiClient:
         )
         second, cached2, calls2 = self._request(repair, schema, prompt_version, label + ":repair", attempt=1)
         cached, calls = cached and cached2, calls + calls2
+        both = (first, second)
         if second.blocked:
-            return CallResult(None, second, cached, calls)
+            return CallResult(None, second, cached, calls, both)
         try:
-            return CallResult(parse_model_json(schema, second.text), second, cached, calls)
+            return CallResult(parse_model_json(schema, second.text), second, cached, calls, both)
         except ValidationError as err:
             detail = str(err).splitlines()[0]
-            raise InvalidModelOutput(f"invalid output after one repair attempt: {detail}", second.text) from err
+            raise InvalidModelOutput(
+                f"invalid output after one repair attempt: {detail}", second.text, responses=both, api_calls=calls
+            ) from err
 
     # -- internals ----------------------------------------------------------------
 

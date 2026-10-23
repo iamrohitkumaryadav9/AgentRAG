@@ -46,6 +46,52 @@ def paired_bootstrap(
     }
 
 
+def paired_bootstrap_metric(
+    y_true: Sequence,
+    pred_a: Sequence,
+    pred_b: Sequence,
+    metric,
+    n_boot: int = 10_000,
+    seed: int = 0,
+    confidence: float = 0.95,
+) -> dict[str, float]:
+    """Bootstrap ``metric(y_true, pred_a) - metric(y_true, pred_b)`` by resampling items.
+
+    For metrics that are not per-item means (macro-F1, Cohen's kappa, per-class recall), where the
+    per-item difference trick in ``paired_bootstrap`` does not apply. Both systems are re-scored on
+    the same resampled items, so the interval reflects paired uncertainty.
+    """
+    n = len(y_true)
+    if not (n == len(pred_a) == len(pred_b)) or n == 0:
+        raise ValueError("y_true, pred_a and pred_b must be equal-length and non-empty")
+    truth, a, b = np.asarray(y_true, dtype=object), np.asarray(pred_a, dtype=object), np.asarray(pred_b, dtype=object)
+    rng = np.random.default_rng(seed)
+    diffs = np.empty(n_boot)
+    for i in range(n_boot):
+        idx = rng.integers(0, n, size=n)
+        diffs[i] = metric(truth[idx], a[idx]) - metric(truth[idx], b[idx])
+    tail = (1.0 - confidence) / 2.0
+    low, high = np.quantile(diffs, [tail, 1.0 - tail])
+    p = 2.0 * min(float((diffs <= 0).mean()), float((diffs >= 0).mean()))
+    return {
+        "mean_diff": float(metric(truth, a) - metric(truth, b)),
+        "ci_low": float(low),
+        "ci_high": float(high),
+        "p_value": float(min(1.0, max(p, 1.0 / n_boot))),
+    }
+
+
+def wilson_interval(successes: int, total: int, z: float = 1.96) -> tuple[float, float]:
+    """Wilson score interval for a proportion; well behaved for small counts and rates near 0 or 1."""
+    if total == 0:
+        return (0.0, 1.0)
+    p = successes / total
+    denom = 1 + z * z / total
+    centre = (p + z * z / (2 * total)) / denom
+    half = z * np.sqrt(p * (1 - p) / total + z * z / (4 * total * total)) / denom
+    return (float(max(0.0, centre - half)), float(min(1.0, centre + half)))
+
+
 def holm_adjust(p_values: Sequence[float]) -> list[float]:
     """Holm-Bonferroni adjusted p-values (controls family-wise error rate).
 
