@@ -28,6 +28,15 @@ dependencies = [
 [project.optional-dependencies]
 dense = ["sentence-transformers>=3.0", "faiss-cpu>=1.8"]
 gemini = ["google-genai>=0.3"]
+# Claim verification (scripts/run_verification.py): Gemini judge + NLI critic. Pinned for reproducibility;
+# not installed by CI, whose tests use a fake transport.
+verify = [
+    "google-genai==2.33.0",
+    "tzdata==2026.5",
+    "transformers==5.20.2",
+    "torch==2.14.1",
+    "truststore==0.10.5",
+]
 # Retrieval benchmarking (scripts/run_ablation.py). Pinned for reproducible
 # numbers; verified on Python 3.14. Not installed by CI.
 bench = [
@@ -43,7 +52,7 @@ dev = ["pytest>=8.0,<9.0", "ruff>=0.6"]
 agentrag = "cli:main"
 
 [tool.setuptools]
-packages = ["agentrag", "agentrag.bench"]
+packages = ["agentrag", "agentrag.bench", "agentrag.verify"]
 py-modules = ["cli"]
 
 [tool.ruff]
