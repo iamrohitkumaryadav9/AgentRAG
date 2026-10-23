@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import argparse
 
-from agentrag.config import settings
+from agentrag.config import VECTOR_BACKENDS, settings
 from agentrag.ingest import build_corpus
 from agentrag.vectorstore import get_vector_store
 
@@ -15,7 +15,7 @@ from agentrag.vectorstore import get_vector_store
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--docs", default=settings.docs_dir)
-    parser.add_argument("--backend", default=settings.vector_backend, choices=["auto", "dense", "tfidf"])
+    parser.add_argument("--backend", default=settings.vector_backend, choices=VECTOR_BACKENDS)
     args = parser.parse_args()
 
     corpus = build_corpus(args.docs, chunk_size=settings.chunk_size, chunk_overlap=settings.chunk_overlap)

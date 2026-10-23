@@ -59,6 +59,25 @@ def overtakers(driver: str, winner_ranking: Sequence[str], loser_ranking: Sequen
     return [doc for doc in ahead if winner_index.get(doc, len(winner_ranking) + 1) > limit]
 
 
+def rare_term_queries(
+    query_terms: Mapping[str, Sequence[str]], doc_freq: Mapping[str, int], max_df: int
+) -> list[str]:
+    """Query ids containing at least one term that occurs in 1..``max_df`` documents.
+
+    A reproducible operational definition of "the query hinges on a rare exact
+    term" (gene symbols, acronyms, rare names). Terms absent from the corpus
+    (df = 0) cannot help any lexical retriever and are ignored.
+    """
+    return [
+        qid for qid, terms in query_terms.items() if any(0 < doc_freq.get(t, 0) <= max_df for t in set(terms))
+    ]
+
+
+def blind_spots(per_query_recall: Mapping[str, float]) -> list[str]:
+    """Query ids for which a system retrieved none of the gold documents."""
+    return [qid for qid, recall in per_query_recall.items() if recall == 0]
+
+
 def classify_by_dense_rank(dense_rank: int | None) -> str:
     if dense_rank is None or dense_rank > 50:
         return "dense-blind-spot"

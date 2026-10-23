@@ -14,6 +14,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+VECTOR_BACKENDS = ("auto", "hybrid", "bm25", "dense", "tfidf")
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -23,7 +25,8 @@ class Settings:
 
     # Retrieval
     top_k: int = int(os.getenv("AGENTRAG_TOP_K", "4"))
-    vector_backend: str = os.getenv("AGENTRAG_VECTOR_BACKEND", "auto")  # auto | dense | tfidf
+    # auto = hybrid (BM25 + bge-small, RRF) if the dense extra is installed, else BM25
+    vector_backend: str = os.getenv("AGENTRAG_VECTOR_BACKEND", "auto")  # auto | hybrid | bm25 | dense | tfidf
 
     # Generation
     llm_backend: str = os.getenv("AGENTRAG_LLM_BACKEND", "auto")  # auto | gemini | extractive
@@ -44,6 +47,9 @@ class Settings:
     # similarity floor was tried first and rejected: it is scale-dependent and
     # broke when chunk size changed. See guardrails.query_coverage.
     min_query_coverage: float = float(os.getenv("AGENTRAG_MIN_QUERY_COVERAGE", "0.40"))
+    # Backend-scale-dependent, so only a sanity floor: the hybrid store reports a
+    # normalised RRF score in (0, 1] that is almost never this low. The coverage
+    # threshold above is the gate that actually decides refusals.
     min_retrieval_score: float = float(os.getenv("AGENTRAG_MIN_RETRIEVAL_SCORE", "0.02"))
 
     # Storage

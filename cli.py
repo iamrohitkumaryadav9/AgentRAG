@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from agentrag.config import settings
+from agentrag.config import VECTOR_BACKENDS, settings
 from agentrag.graph import run_query
 from agentrag.ingest import build_corpus
 from agentrag.llm import get_llm
@@ -21,7 +21,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="AgentRAG CLI demo")
     parser.add_argument("question", help="Question to ask the knowledge base")
     parser.add_argument("--docs", default=settings.docs_dir, help="Directory of documents to index")
-    parser.add_argument("--vector-backend", default=settings.vector_backend, choices=["auto", "dense", "tfidf"])
+    parser.add_argument("--vector-backend", default=settings.vector_backend, choices=VECTOR_BACKENDS)
     parser.add_argument("--llm-backend", default=settings.llm_backend, choices=["auto", "gemini", "extractive"])
     args = parser.parse_args()
 

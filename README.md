@@ -13,11 +13,11 @@ an **evaluation harness** that scores answer quality against a golden set,
 and **OpenTelemetry instrumentation** that makes per-agent latency and cost
 visible. Both run in CI as quality gates on every push.
 
-Everything runs **fully offline out of the box** (TF-IDF retrieval + a
+Everything runs **fully offline out of the box** (BM25 retrieval + a
 deterministic extractive generator), so you can clone it and try it in
 seconds with no API keys — while every component is pluggable into a real
-stack: dense embeddings (sentence-transformers + FAISS), a real LLM
-(Google Gemini), and a FastAPI service.
+stack: hybrid BM25 + dense retrieval (sentence-transformers + FAISS), a real
+LLM (Google Gemini), and a FastAPI service.
 
 ```
             ┌────────┐
@@ -26,7 +26,7 @@ stack: dense embeddings (sentence-transformers + FAISS), a real LLM
                 │ needs retrieval                            ▼
                 ▼                                        ┌────────┐
           ┌────────────┐                                 │ direct │──▶ answer
-          │ retriever  │  FAISS / TF-IDF                 └────────┘
+          │ retriever  │  BM25 + dense (RRF) / BM25      └────────┘
           └─────┬──────┘
                 │
         coverage│< floor ──────────────▶ ┌────────┐
@@ -82,8 +82,9 @@ a change made answers better or worse.
   grounding score, and a token-cost estimate. Spans are summarised per
   request by default, and can be shipped to any OTLP collector by setting
   two env vars — no code change.
-- **Every external dependency degrades gracefully.** Dense embeddings when
-  available, TF-IDF otherwise; Gemini when `GOOGLE_API_KEY` is set, an
+- **Every external dependency degrades gracefully.** Hybrid BM25 + dense
+  retrieval when the `dense` extra is installed, plain BM25 otherwise (never
+  a silent drop to a weaker retriever than BM25); Gemini when `GOOGLE_API_KEY` is set, an
   offline extractive generator otherwise. The pipeline never hard-fails
   because an optional dependency is missing.
 - **CI enforces both gates** (`.github/workflows/ci.yml`): the test suite
@@ -130,7 +131,7 @@ repo includes an ablation on the public **BEIR SciFact** benchmark (5,183 abstra
 
 | System | nDCG@10 | Recall@5 | Recall@100 | Latency p50 (ms) |
 | --- | --- | --- | --- | --- |
-| TF-IDF (this app's current retriever) | 0.596 | 0.667 | 0.892 | 49 |
+| TF-IDF (the app's previous default) | 0.596 | 0.667 | 0.892 | 49 |
 | BM25 | 0.670 | 0.728 | 0.886 | 18 |
 | Dense: all-MiniLM-L6-v2 | 0.645 | 0.738 | 0.925 | 18 |
 | Dense: bge-small-en-v1.5 | **0.713** | 0.759 | 0.942 | 32 |
@@ -147,7 +148,27 @@ repo includes an ablation on the public **BEIR SciFact** benchmark (5,183 abstra
 
 Full tables, confidence intervals, caveats and reproduction steps: [docs/scifact_ablation.md](docs/scifact_ablation.md).
 Where hybrid loses to BM25 and why: [docs/scifact_error_analysis.md](docs/scifact_error_analysis.md).
-The app's default retrieval backend has **not** been changed to reflect these results yet.
+### Why hybrid (BM25 + bge-small, RRF) is the default
+
+`AGENTRAG_VECTOR_BACKEND=auto` selects **hybrid retrieval** when the `dense` extra is installed and falls back to
+**BM25** (not TF-IDF) when it is not. CI pins `AGENTRAG_VECTOR_BACKEND=tfidf` and the extractive generator, so it
+stays fast and download-free.
+
+- **Recall ceiling.** Hybrid leaves the fewest queries with no gold document anywhere in the top 100: 10, versus
+  17 for bge-small and 32 for BM25. It finds at least one gold document for 9 of the 17 queries dense misses
+  entirely and 22 of the 32 BM25 misses. Everything downstream (reranker, synthesizer, critic) can only use what
+  retrieval surfaces, so the deepest, most complementary candidate pool is the safest foundation.
+- **A hedge against dense blind spots.** The error analysis shows the dense model never retrieving documents
+  whose match rests on an exact rare term (gene symbols, acronyms); BM25 keeps those reachable. The honest limit:
+  on queries containing a very rare term (document frequency ≤ 3, n = 142), hybrid versus bge-small alone is
+  +0.029 nDCG@10 with 95% CI [−0.007, +0.065], not distinguishable at this sample size. The benefit is
+  protection against failure cases, not a measured gain in rank quality.
+- **What it does not buy.** Top-10 precision: hybrid ≈ bge-small (−0.002 [−0.029, +0.026]). bge-small alone is a
+  defensible alternative if latency or the two-index footprint matters more than coverage.
+- **Cost.** About twice BM25's retrieval latency, plus a one-off ~130 MB model download. The BM25 fallback needs
+  no extra dependencies or downloads.
+
+Reproduce the numbers with `python scripts/run_complementarity.py`.
 
 ## Quickstart
 
@@ -163,7 +184,7 @@ python -m venv .venv
 source .venv/bin/activate        # Windows PowerShell: .\.venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
 
-# Runs fully offline: TF-IDF retrieval + extractive generation, no API key
+# Runs fully offline: BM25 retrieval + extractive generation, no API key
 python cli.py "What is retrieval-augmented generation?"
 ```
 
@@ -226,11 +247,17 @@ pip install -e ".[gemini]"
 python cli.py "How do guardrails prevent hallucination?"
 ```
 
-### Enabling dense semantic retrieval (optional)
+### Enabling hybrid retrieval (recommended)
 
 ```bash
 pip install -e ".[dense]"     # sentence-transformers + FAISS
+python cli.py "How do guardrails prevent hallucination?"   # now retrieval=hybrid-rrf
 ```
+
+With the extra installed, `auto` fuses BM25 with `BAAI/bge-small-en-v1.5` embeddings via reciprocal rank fusion
+(model weights download from Hugging Face on first use; if that fails, `auto` logs a warning and uses BM25).
+Pick a backend explicitly with `AGENTRAG_VECTOR_BACKEND=hybrid|bm25|dense|tfidf`; explicit choices never fall
+back silently.
 
 ### Running the API
 
@@ -272,7 +299,8 @@ ruff check .
 agentrag/
   config.py         runtime settings (env-var driven)
   ingest.py         document loading + sentence-aware chunking
-  vectorstore.py    pluggable retrieval: DenseVectorStore (FAISS) / TfidfVectorStore
+  vectorstore.py    pluggable retrieval: Hybrid (BM25 + dense, RRF) / Bm25 / Dense (FAISS) / Tfidf
+  fusion.py         reciprocal rank fusion, shared by the app and the benchmarks
   llm.py            pluggable generation: GeminiLLM / ExtractiveLLM
   schemas.py        Pydantic structured-output contracts
   guardrails.py     groundedness, citation, PII, and relevance checks

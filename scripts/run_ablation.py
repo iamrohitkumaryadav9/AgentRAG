@@ -21,37 +21,8 @@ import time
 from pathlib import Path
 
 from agentrag.bench import data, metrics
-from agentrag.bench.systems import (
-    BM25Retriever,
-    CrossEncoderReranker,
-    DenseRetriever,
-    HybridRRFRetriever,
-    Retriever,
-    TfidfRetriever,
-)
-
-CACHE = Path(".bench_cache")
-RESULTS = Path("docs/results")
-BGE_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
-
-# Registry: key -> factory taking `get`, which returns the shared instance of
-# another system so a component is indexed once however many systems use it.
-FACTORIES = {
-    "tfidf": lambda get: TfidfRetriever(),
-    "bm25": lambda get: BM25Retriever(),
-    "minilm": lambda get: DenseRetriever("sentence-transformers/all-MiniLM-L6-v2", cache_dir=CACHE / "emb"),
-    "bge-small": lambda get: DenseRetriever(
-        "BAAI/bge-small-en-v1.5", query_prefix=BGE_QUERY_PREFIX, cache_dir=CACHE / "emb"
-    ),
-    "hybrid-minilm": lambda get: HybridRRFRetriever([get("bm25"), get("minilm")]),
-    "hybrid-bge": lambda get: HybridRRFRetriever([get("bm25"), get("bge-small")]),
-    "hybrid-bge-rerank": lambda get: CrossEncoderReranker(get("hybrid-bge")),
-}
-
-
-def percentile(values: list[float], p: float) -> float:
-    ordered = sorted(values)
-    return ordered[min(len(ordered) - 1, int(round(p * (len(ordered) - 1))))]
+from agentrag.bench.registry import CACHE, FACTORIES, RESULTS, make_getter, percentile
+from agentrag.bench.systems import Retriever
 
 
 def run_system(retriever: Retriever, ds: data.BeirDataset, depth: int = 100, warmup: int = 5) -> dict:
@@ -98,12 +69,8 @@ def main() -> int:
     ds = data.load("scifact", CACHE)
     print(f"SciFact: {len(ds.corpus)} docs, {len(ds.queries)} test queries\n")
 
-    instances: dict[str, Retriever] = {}
+    get = make_getter()
 
-    def get(key: str) -> Retriever:
-        if key not in instances:
-            instances[key] = FACTORIES[key](get)
-        return instances[key]
 
     (CACHE / "runs").mkdir(parents=True, exist_ok=True)
     RESULTS.mkdir(parents=True, exist_ok=True)

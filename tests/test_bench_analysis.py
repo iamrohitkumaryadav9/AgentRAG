@@ -3,11 +3,13 @@ import math
 import pytest
 
 from agentrag.bench.analysis import (
+    blind_spots,
     classify_by_dense_rank,
     dcg_contribution,
     loss_driver,
     overtakers,
     rank_of,
+    rare_term_queries,
     worst_losses,
 )
 
@@ -35,6 +37,17 @@ def test_overtakers_are_ahead_in_loser_but_behind_in_winner():
     loser = ["a", "b", "x", "g"]   # 'a' ahead (not an overtaker), 'b' and 'x' overtook gold
     assert overtakers("g", winner, loser) == ["b", "x"]
     assert overtakers("missing", winner, loser) == []
+
+
+def test_rare_term_queries_uses_document_frequency_bounds():
+    terms = {"q1": ["mda5", "receptor"], "q2": ["receptor", "cell"], "q3": ["unseen"], "q4": []}
+    df = {"mda5": 1, "receptor": 40, "cell": 300}
+    assert rare_term_queries(terms, df, max_df=3) == ["q1"]
+    assert rare_term_queries(terms, df, max_df=50) == ["q1", "q2"]  # 'unseen' has df 0 and is ignored
+
+
+def test_blind_spots_are_queries_with_zero_recall():
+    assert blind_spots({"a": 0.0, "b": 0.5, "c": 0}) == ["a", "c"]
 
 
 @pytest.mark.parametrize(

@@ -14,7 +14,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from agentrag.config import settings
+from agentrag.config import VECTOR_BACKENDS, settings
 from agentrag.evaluation import check_thresholds, evaluate, format_report, to_json
 from agentrag.ingest import build_corpus
 from agentrag.llm import get_llm
@@ -24,7 +24,7 @@ from agentrag.vectorstore import get_vector_store
 def main() -> int:
     parser = argparse.ArgumentParser(description="AgentRAG evaluation harness")
     parser.add_argument("--docs", default=settings.docs_dir)
-    parser.add_argument("--vector-backend", default=settings.vector_backend, choices=["auto", "dense", "tfidf"])
+    parser.add_argument("--vector-backend", default=settings.vector_backend, choices=VECTOR_BACKENDS)
     parser.add_argument("--llm-backend", default=settings.llm_backend, choices=["auto", "gemini", "extractive"])
     parser.add_argument("--json-out", help="Write the full JSON report here")
     parser.add_argument("--markdown-out", help="Write the markdown summary table here")

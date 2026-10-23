@@ -52,6 +52,18 @@ def test_format_report_renders_markdown_table():
     assert "Retrieval hit-rate@k" in markdown
 
 
+def test_bm25_backend_meets_quality_gate_and_refuses_across_chunk_configs():
+    """BM25 is the auto fallback, so it must hold the same quality gate as TF-IDF."""
+    from agentrag.vectorstore import Bm25VectorStore
+
+    for chunk_size, overlap in [(300, 50), (500, 80), (800, 120), (1200, 150)]:
+        store = Bm25VectorStore()
+        store.build(build_corpus("data/sample_docs", chunk_size=chunk_size, chunk_overlap=overlap))
+        report = evaluate(store, llm=ExtractiveLLM())
+        assert not check_thresholds(report["metrics"], DEFAULT_THRESHOLDS), f"gate failed at chunk_size={chunk_size}"
+        assert report["metrics"]["refusal_accuracy"] == 1.0
+
+
 def test_refusal_behaviour_is_stable_across_chunk_configs():
     """The relevance gate must not be tuned to one chunking configuration.
 

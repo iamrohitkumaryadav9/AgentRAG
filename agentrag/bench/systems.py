@@ -12,6 +12,8 @@ from pathlib import Path
 
 import numpy as np
 
+from agentrag.fusion import rrf_fuse
+
 _TOKEN_RE = re.compile(r"\w+")
 
 
@@ -25,6 +27,10 @@ class Retriever(ABC):
     @abstractmethod
     def search(self, query: str, k: int = 100) -> list[tuple[str, float]]: ...
 
+    def search_batch(self, queries: list[str], k: int = 100) -> list[list[tuple[str, float]]]:
+        """Answer many queries at once. Subclasses override this when batching is cheaper."""
+        return [self.search(q, k=k) for q in queries]
+
 
 def _top_k(scores: np.ndarray, doc_ids: list[str], k: int) -> list[tuple[str, float]]:
     k = min(k, len(doc_ids))
@@ -33,15 +39,16 @@ def _top_k(scores: np.ndarray, doc_ids: list[str], k: int) -> list[tuple[str, fl
     return [(doc_ids[i], float(scores[i])) for i in top]
 
 
-class TfidfRetriever(Retriever):
-    """The app's own TfidfVectorStore (1-2 grams, English stopwords), as a baseline."""
+class StoreRetriever(Retriever):
+    """Adapter that runs one of the app's own ``VectorStore`` backends through the benchmark.
 
-    name = "tfidf"
+    Benchmarking the shipped classes (not a re-implementation) is what lets the
+    results speak for the app's defaults.
+    """
 
-    def __init__(self) -> None:
-        from agentrag.vectorstore import TfidfVectorStore
-
-        self._store = TfidfVectorStore()
+    def __init__(self, name: str, store_factory) -> None:
+        self.name = name
+        self._store = store_factory()
 
     def index(self, corpus: dict[str, str]) -> None:
         from agentrag.ingest import Chunk
@@ -51,6 +58,15 @@ class TfidfRetriever(Retriever):
 
     def search(self, query: str, k: int = 100) -> list[tuple[str, float]]:
         return [(r.chunk.source, r.score) for r in self._store.search(query, k=k)]
+
+
+class TfidfRetriever(StoreRetriever):
+    """The app's TfidfVectorStore (1-2 grams, English stopwords), as a baseline."""
+
+    def __init__(self) -> None:
+        from agentrag.vectorstore import TfidfVectorStore
+
+        super().__init__("tfidf", TfidfVectorStore)
 
 
 class BM25Retriever(Retriever):
@@ -137,20 +153,20 @@ class DenseRetriever(Retriever):
         scores, idx = self._index.search(vec, min(k, len(self._doc_ids)))
         return [(self._doc_ids[i], float(s)) for s, i in zip(scores[0], idx[0], strict=True) if i != -1]
 
-
-def rrf_fuse(rankings: list[list[str]], k: int = 60, limit: int = 100) -> list[tuple[str, float]]:
-    """Reciprocal rank fusion: score(d) = sum over lists of 1 / (k + rank), rank from 1.
-
-    Rank-based, so it needs no score normalisation across systems whose raw
-    scores (BM25, cosine) live on incompatible scales. Ties break by first
-    appearance, keeping the result deterministic.
-    """
-    scores: dict[str, float] = {}
-    for ranking in rankings:
-        for rank, doc_id in enumerate(ranking, start=1):
-            scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (k + rank)
-    ordered = sorted(scores.items(), key=lambda item: -item[1])  # sort is stable
-    return ordered[:limit]
+    def search_batch(self, queries: list[str], k: int = 100) -> list[list[tuple[str, float]]]:
+        """Encode all queries in batches and run one FAISS search for the whole matrix."""
+        vecs = self._load_model().encode(
+            [self.query_prefix + q for q in queries],
+            batch_size=64,
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+            show_progress_bar=False,
+        ).astype("float32")
+        scores, idx = self._index.search(vecs, min(k, len(self._doc_ids)))
+        return [
+            [(self._doc_ids[i], float(s)) for s, i in zip(row_s, row_i, strict=True) if i != -1]
+            for row_s, row_i in zip(scores, idx, strict=True)
+        ]
 
 
 class HybridRRFRetriever(Retriever):
@@ -169,6 +185,13 @@ class HybridRRFRetriever(Retriever):
     def search(self, query: str, k: int = 100) -> list[tuple[str, float]]:
         rankings = [[d for d, _ in part.search(query, k=self.depth)] for part in self.parts]
         return rrf_fuse(rankings, k=self.k_rrf, limit=k)
+
+    def search_batch(self, queries: list[str], k: int = 100) -> list[list[tuple[str, float]]]:
+        per_part = [part.search_batch(queries, k=self.depth) for part in self.parts]
+        return [
+            rrf_fuse([[d for d, _ in results[i]] for results in per_part], k=self.k_rrf, limit=k)
+            for i in range(len(queries))
+        ]
 
 
 class CrossEncoderReranker(Retriever):
@@ -194,14 +217,37 @@ class CrossEncoderReranker(Retriever):
         self._corpus = corpus
         self.indexed = True
 
-    def search(self, query: str, k: int = 100) -> list[tuple[str, float]]:
+    def _load_model(self):
         if self._model is None:
             from sentence_transformers import CrossEncoder
 
             self._model = CrossEncoder(self.model_name, device="cpu")
-        candidates = self.first_stage.search(query, k=max(k, self.rerank_depth))
+        return self._model
+
+    def _rerank(self, query: str, candidates: list[tuple[str, float]], scores, k: int) -> list[tuple[str, float]]:
         head, tail = candidates[: self.rerank_depth], candidates[self.rerank_depth :]
-        pairs = [(query, self._corpus[d]) for d, _ in head]
-        scores = self._model.predict(pairs, batch_size=25, show_progress_bar=False)
         reranked = sorted(zip((d for d, _ in head), scores, strict=True), key=lambda item: -item[1])
         return ([(d, float(s)) for d, s in reranked] + tail)[:k]
+
+    def search(self, query: str, k: int = 100) -> list[tuple[str, float]]:
+        model = self._load_model()
+        candidates = self.first_stage.search(query, k=max(k, self.rerank_depth))
+        pairs = [(query, self._corpus[d]) for d, _ in candidates[: self.rerank_depth]]
+        scores = model.predict(pairs, batch_size=25, show_progress_bar=False)
+        return self._rerank(query, candidates, scores, k)
+
+    def search_batch(self, queries: list[str], k: int = 100) -> list[list[tuple[str, float]]]:
+        """Batch the first stage, then score every (query, candidate) pair in one cross-encoder pass."""
+        model = self._load_model()
+        all_candidates = self.first_stage.search_batch(queries, k=max(k, self.rerank_depth))
+        pairs = [
+            (q, self._corpus[d]) for q, cands in zip(queries, all_candidates, strict=True)
+            for d, _ in cands[: self.rerank_depth]
+        ]
+        flat = model.predict(pairs, batch_size=32, show_progress_bar=False)
+        out, offset = [], 0
+        for q, cands in zip(queries, all_candidates, strict=True):
+            n = min(len(cands), self.rerank_depth)
+            out.append(self._rerank(q, cands, flat[offset : offset + n], k))
+            offset += n
+        return out
