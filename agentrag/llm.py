@@ -1,8 +1,7 @@
 """Pluggable generation backends, returning validated structured output.
 
 * ``GeminiLLM``      - real LLM calls via the Google Gemini API (used when
-  ``GOOGLE_API_KEY`` is configured -- the same provider already used in the
-  Quantis project's AI-insights feature). Asks the model for JSON matching
+  ``GOOGLE_API_KEY`` is configured). Asks the model for JSON matching
   ``ANSWER_JSON_SCHEMA`` and validates the result with Pydantic.
 * ``ExtractiveLLM``  - a deterministic, offline "generator" that composes an
   answer purely by selecting and stitching together the sentences most

@@ -27,13 +27,22 @@ dependencies = [
 [project.optional-dependencies]
 dense = ["sentence-transformers>=3.0", "faiss-cpu>=1.8"]
 gemini = ["google-genai>=0.3"]
+# Retrieval benchmarking (scripts/run_ablation.py). Pinned for reproducible
+# numbers; verified on Python 3.14. Not installed by CI.
+bench = [
+    "sentence-transformers==6.2.0",
+    "torch==2.14.1",
+    "faiss-cpu==1.15.1",
+    "rank-bm25==0.2.2",
+    "truststore==0.10.5",
+]
 dev = ["pytest>=8.0,<9.0", "ruff>=0.6"]
 
 [project.scripts]
 agentrag = "cli:main"
 
 [tool.setuptools]
-packages = ["agentrag"]
+packages = ["agentrag", "agentrag.bench"]
 py-modules = ["cli"]
 
 [tool.ruff]
