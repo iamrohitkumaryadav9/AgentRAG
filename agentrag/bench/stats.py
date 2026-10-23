@@ -1,0 +1,62 @@
+"""Paired significance testing for per-query IR metrics.
+
+Two systems are scored on the *same* queries, so the right unit is the
+per-query difference. A paired bootstrap resamples queries with replacement,
+recomputes the mean difference each time, and reads the confidence interval
+off the resulting distribution. Report the interval, not just the p-value:
+it says how large the gain plausibly is, which a p-value alone does not.
+"""
+from __future__ import annotations
+
+from collections.abc import Sequence
+
+import numpy as np
+
+
+def paired_bootstrap(
+    a: Sequence[float],
+    b: Sequence[float],
+    n_boot: int = 10_000,
+    seed: int = 0,
+    confidence: float = 0.95,
+) -> dict[str, float]:
+    """Bootstrap the mean of ``a - b`` over paired per-query scores.
+
+    Returns the observed mean difference, a percentile confidence interval,
+    and a two-sided bootstrap p-value (twice the smaller tail mass on either
+    side of zero, floored at 1 / n_boot since that is the test's resolution).
+    """
+    x, y = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
+    if x.shape != y.shape or x.ndim != 1 or x.size == 0:
+        raise ValueError("a and b must be equal-length, non-empty 1-D sequences")
+
+    diffs = x - y
+    rng = np.random.default_rng(seed)
+    idx = rng.integers(0, diffs.size, size=(n_boot, diffs.size))
+    boot_means = diffs[idx].mean(axis=1)
+
+    tail = (1.0 - confidence) / 2.0
+    low, high = np.quantile(boot_means, [tail, 1.0 - tail])
+    p = 2.0 * min(float((boot_means <= 0).mean()), float((boot_means >= 0).mean()))
+    return {
+        "mean_diff": float(diffs.mean()),
+        "ci_low": float(low),
+        "ci_high": float(high),
+        "p_value": float(min(1.0, max(p, 1.0 / n_boot))),
+    }
+
+
+def holm_adjust(p_values: Sequence[float]) -> list[float]:
+    """Holm-Bonferroni adjusted p-values (controls family-wise error rate).
+
+    Comparing many system pairs at once inflates false positives; Holm is
+    uniformly more powerful than plain Bonferroni and just as safe.
+    """
+    m = len(p_values)
+    order = sorted(range(m), key=lambda i: p_values[i])
+    adjusted = [0.0] * m
+    running = 0.0
+    for rank, i in enumerate(order):
+        running = max(running, (m - rank) * p_values[i])
+        adjusted[i] = min(1.0, running)
+    return adjusted
