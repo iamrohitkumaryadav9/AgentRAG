@@ -123,6 +123,32 @@ backends (reproduce with `python scripts/run_eval.py`):
 | Latency p50 / p95 | ~14 ms / ~15 ms |
 | Mean est. tokens per query | 610 |
 
+## Retrieval ablation (BEIR SciFact)
+
+The 12-question golden set above checks the pipeline; it cannot rank retrieval strategies. For that, the
+repo includes an ablation on the public **BEIR SciFact** benchmark (5,183 abstracts, 300 test claims):
+
+| System | nDCG@10 | Recall@5 | Recall@100 | Latency p50 (ms) |
+| --- | --- | --- | --- | --- |
+| TF-IDF (this app's current retriever) | 0.596 | 0.667 | 0.892 | 49 |
+| BM25 | 0.670 | 0.728 | 0.886 | 18 |
+| Dense: all-MiniLM-L6-v2 | 0.645 | 0.738 | 0.925 | 18 |
+| Dense: bge-small-en-v1.5 | **0.713** | 0.759 | 0.942 | 32 |
+| Hybrid RRF: BM25 + MiniLM | 0.688 | 0.757 | 0.961 | 35 |
+| Hybrid RRF: BM25 + bge-small | 0.711 | **0.762** | **0.965** | 58 |
+| Hybrid (bge) + cross-encoder rerank | 0.695 | 0.748 | 0.965 | 6,159 |
+
+- BM25 over TF-IDF is a clear gain (+0.074 nDCG@10, 95% CI [+0.046, +0.102]).
+- Hybrid (bge) beats BM25 by +0.041 [+0.018, +0.064], significant after multiple-comparison correction, but
+  is **statistically indistinguishable from bge-small alone** on nDCG@10 (−0.002 [−0.029, +0.026]). What hybrid
+  adds is deeper recall (Recall@100 0.965 vs 0.942).
+- The off-the-shelf MS MARCO cross-encoder did **not** help (−0.016, not significant) and costs ~6 s/query on CPU.
+- Metric code is validated against published BM25 figures and the MTEB scores of both dense models.
+
+Full tables, confidence intervals, caveats and reproduction steps: [docs/scifact_ablation.md](docs/scifact_ablation.md).
+Where hybrid loses to BM25 and why: [docs/scifact_error_analysis.md](docs/scifact_error_analysis.md).
+The app's default retrieval backend has **not** been changed to reflect these results yet.
+
 ## Quickstart
 
 Requires **Python 3.10+** (developed and verified locally on 3.14; CI runs
@@ -223,6 +249,16 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 python cli.py "What is RAG?"
 ```
 
+### Reproducing the retrieval ablation (optional, heavy)
+
+```bash
+pip install -e ".[bench]"      # pinned torch / sentence-transformers / faiss-cpu / rank-bm25
+python scripts/run_ablation.py --systems tfidf,bm25,minilm,bge-small,hybrid-minilm,hybrid-bge,hybrid-bge-rerank
+python scripts/run_significance.py && python scripts/run_error_analysis.py
+```
+
+CPU-only this takes roughly an hour, mostly encoding the corpus and running the reranker. CI does not run it.
+
 ### Running the tests
 
 ```bash
@@ -244,9 +280,11 @@ agentrag/
   evaluation.py     golden-set eval harness and quality thresholds
   graph.py          the LangGraph multi-agent workflow
   api.py            FastAPI service
+  bench/            SciFact retrieval ablation: metrics, bootstrap stats, systems, error analysis
 cli.py              terminal demo
-scripts/            index builder, eval runner
+scripts/            index builder, eval runner, ablation / significance / error-analysis runners
 tests/              pytest suite (offline, no external calls)
+docs/               SciFact ablation write-up, error analysis, committed result files
 data/sample_docs/   built-in knowledge base used by the demo, tests, and eval
 .github/workflows/  CI: test matrix + AI quality gate
 ```
