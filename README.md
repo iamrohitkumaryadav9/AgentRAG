@@ -8,10 +8,13 @@ agent drafts a **structured, schema-validated** answer, and a critic agent
 checks it for groundedness and fabricated citations — looping back with
 feedback if the check fails.
 
-It ships with the two things that separate a RAG demo from a RAG system:
-an **evaluation harness** that scores answer quality against a golden set,
-and **OpenTelemetry instrumentation** that makes per-agent latency and cost
-visible. Both run in CI as quality gates on every push.
+It ships with the things that separate a RAG demo from a RAG system:
+a **retrieval benchmark** on the public BEIR SciFact set (seven strategies,
+confidence intervals, error analysis), a small **regression harness** that
+runs in CI against a 3-document toy corpus, and **OpenTelemetry
+instrumentation** that makes per-agent latency and cost visible. The toy
+harness is a smoke test of pipeline behaviour, not a quality claim; the
+retrieval benchmark is where the quality evidence lives.
 
 Everything runs **fully offline out of the box** (BM25 retrieval + a
 deterministic extractive generator), so you can clone it and try it in
@@ -73,10 +76,12 @@ a change made answers better or worse.
 - **Refuses instead of guessing.** A relevance gate compares the question's
   topical terms against the retrieved context and abstains when coverage is
   too low. See the note below on why this replaced a similarity threshold.
-- **Evaluated, not vibes-checked** (`agentrag/evaluation.py`): a golden set
-  of in-scope *and* deliberately out-of-scope questions, scored on retrieval
-  hit-rate, groundedness, keyword recall, refusal accuracy, citation
-  validity, p50/p95 latency, and estimated tokens per query.
+- **Regression-tested, and benchmarked separately** (`agentrag/evaluation.py`,
+  `agentrag/bench/`): a 12-question golden set of in-scope *and* deliberately
+  out-of-scope questions guards pipeline behaviour (refusals, citation
+  validity, latency, token cost) on a toy corpus. Retrieval quality is measured
+  on BEIR SciFact instead. Note that the harness's "groundedness" is a
+  lexical word-overlap check, not a measure of faithfulness.
 - **Instrumented with OpenTelemetry** (`agentrag/observability.py`): every
   agent node emits a span with latency, retrieval quality, retry depth,
   grounding score, and a token-cost estimate. Spans are summarised per
@@ -87,9 +92,9 @@ a change made answers better or worse.
   a silent drop to a weaker retriever than BM25); Gemini when `GOOGLE_API_KEY` is set, an
   offline extractive generator otherwise. The pipeline never hard-fails
   because an optional dependency is missing.
-- **CI enforces both gates** (`.github/workflows/ci.yml`): the test suite
-  (ruff lint, then pytest across Python 3.10, 3.12 and 3.14), then the eval harness, which fails the build if
-  answer quality drops below threshold. Runs with no secrets and no network.
+- **CI runs two gates** (`.github/workflows/ci.yml`): the test suite
+  (ruff lint, then pytest across Python 3.10, 3.12 and 3.14), then the toy-corpus smoke test, which fails the
+  build if pipeline behaviour regresses (e.g. refusals stop working). Runs with no secrets and no network.
 
 ### A finding from the eval harness
 
@@ -109,15 +114,19 @@ pins that property at three different chunk sizes.
 
 Refusal accuracy is now 100% and enforced as a CI threshold.
 
-## Current metrics
+## Toy-corpus smoke test (not a quality claim)
 
-Measured by `scripts/run_eval.py` on the built-in corpus with the offline
-backends (reproduce with `python scripts/run_eval.py`):
+`scripts/run_eval.py` runs 12 questions against the 3 built-in sample documents (10 chunks). CI uses it to catch
+regressions. **Read the numbers below as "the pipeline still behaves", not as accuracy**: with 12 questions and a
+generator that copies sentences from the retrieved context, near-perfect scores are close to guaranteed.
+In particular, "groundedness" is the share of answer words that also appear in the retrieved text, which an
+extractive generator satisfies by construction; it measures nothing about whether a claim is true or supported.
+(Reproduce with `python scripts/run_eval.py`.)
 
 | Metric | Value |
 | --- | --- |
 | Retrieval hit-rate@k | 100.0% |
-| Groundedness pass rate | 100.0% |
+| Groundedness pass rate (lexical overlap, see above) | 100.0% |
 | Keyword recall | 80.0% |
 | Refusal accuracy (out-of-scope) | 100.0% |
 | Citation validity | 100.0% |
@@ -153,7 +162,9 @@ single-thread run is in the docs; repeat runs differ by up to ~30%, so read rati
 - The off-the-shelf MS MARCO cross-encoder did **not** help (−0.016, not significant) and costs ~6 s/query on
   CPU (batching barely helps: 5.8 s). Replicating the BEIR paper's own BM25 → cross-encoder setup gave 0.680
   against the paper's 0.688; across both setups reranked quality sits at about 0.68–0.70 whether the first stage
-  scores 0.670 or 0.711, so a better first stage does not make this reranker pay off.
+  scores 0.670 or 0.711, so a better first stage does not make this reranker pay off. (Scored only on the 188
+  claims that have evidence, the rerank is +0.009, not significant; the deficit sits in the 112
+  "not enough info" claims. See the docs' second view.)
 - Metric code is validated against published BM25 figures and the MTEB scores of both dense models.
 
 Full tables, confidence intervals, caveats and reproduction steps: [docs/scifact_ablation.md](docs/scifact_ablation.md).

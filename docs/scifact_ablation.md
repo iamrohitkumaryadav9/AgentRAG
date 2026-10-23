@@ -56,6 +56,70 @@ identical to four decimals, so batching changes speed, not answers):
   by up to 29% for the same configuration (TF-IDF: 49 ms then 63 ms; bge-small: 32 then 40 ms). Use ratios and
   orders of magnitude, not exact milliseconds.
 
+## A second view: only the claims that have evidence
+
+BEIR's 300 test claims are the original SciFact dev claims, and 112 of them are labelled NOT_ENOUGH_INFO: no
+abstract in the corpus was found to support or contradict them. BEIR still lists a "relevant" document for those
+claims (the abstract each was written about), so the headline retrieval numbers above include claims that have no
+evidence to find. For claim verification only the **188 SUPPORT + CONTRADICT claims** matter, so the same runs are
+re-scored on them. No models were re-run; this reads the cached top-100 rankings
+(`python scripts/run_retrieval_views.py`, which first re-checks that the two datasets match: 300 of 300 ids and
+texts, 5,183 documents).
+
+Metrics added here, all computed from qrels with no LLM: **Hit@k** (any relevant document in the top k);
+**context precision@4** (RAGAS-style: the rank-weighted share of the top 4 that is relevant, so early relevant
+context scores higher than late); **context recall@4** (the share of relevant documents inside the top 4, equal to
+recall@4 because the qrels documents are the references). The RAGAS originals use an LLM to judge relevance; these
+are the document-level, qrels-based equivalents.
+
+**All 300 claims** (BEIR-comparable)
+
+| System | nDCG@10 | Hit@1 | Hit@5 | Hit@10 | Ctx precision@4 | Ctx recall@4 |
+| --- | --- | --- | --- | --- | --- | --- |
+| TF-IDF | 0.596 | 0.453 | 0.690 | 0.760 | 0.537 | 0.633 |
+| BM25 | 0.670 | 0.547 | 0.753 | 0.813 | 0.627 | 0.711 |
+| Dense: MiniLM | 0.645 | 0.503 | 0.753 | 0.793 | 0.594 | 0.711 |
+| Dense: bge-small | 0.713 | 0.607 | 0.780 | 0.847 | 0.663 | 0.725 |
+| Hybrid: BM25 + MiniLM | 0.688 | 0.560 | 0.777 | 0.833 | 0.640 | 0.728 |
+| Hybrid: BM25 + bge-small | 0.711 | 0.603 | 0.780 | 0.840 | 0.667 | 0.742 |
+| Hybrid (bge) + cross-encoder | 0.695 | 0.583 | 0.770 | 0.840 | 0.649 | 0.734 |
+
+**The 188 SUPPORT + CONTRADICT claims** (the last column asks for a document a human marked as evidence, rather
+than any qrels document)
+
+| System | nDCG@10 | Hit@1 | Hit@5 | Hit@10 | Ctx precision@4 | Ctx recall@4 | Evidence-doc hit@5 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| TF-IDF | 0.736 | 0.606 | 0.840 | 0.894 | 0.684 | 0.761 | 0.835 |
+| BM25 | 0.825 | 0.734 | 0.894 | 0.952 | 0.795 | 0.837 | 0.883 |
+| Dense: MiniLM | 0.779 | 0.644 | 0.878 | 0.920 | 0.735 | 0.839 | 0.878 |
+| Dense: bge-small | 0.862 | 0.782 | 0.920 | 0.968 | 0.831 | 0.870 | 0.910 |
+| Hybrid: BM25 + MiniLM | 0.836 | 0.729 | 0.926 | 0.957 | 0.804 | 0.869 | 0.926 |
+| Hybrid: BM25 + bge-small | 0.859 | 0.777 | 0.931 | 0.968 | 0.830 | 0.886 | 0.931 |
+| Hybrid (bge) + cross-encoder | 0.868 | 0.787 | 0.947 | 0.973 | 0.845 | 0.901 | 0.947 |
+
+Paired-bootstrap nDCG@10 differences (95% CI), same comparisons in both views:
+
+| Comparison | All 300 | 188 with evidence |
+| --- | --- | --- |
+| Hybrid (bge) − BM25 | +0.041 [+0.018, +0.064] | +0.034 [+0.012, +0.057] |
+| Hybrid (bge) − bge-small | −0.002 [−0.029, +0.026] | −0.003 [−0.030, +0.023] |
+| bge-small − BM25 | +0.043 [+0.007, +0.078] | +0.037 [−0.001, +0.075] |
+| Rerank − Hybrid (bge) | −0.016 [−0.045, +0.014] | +0.009 [−0.021, +0.041] |
+
+These intervals are uncorrected (the Holm-corrected family is the 21-pair table below).
+
+- **The conclusions about the first-stage retrievers carry over.** The ordering is nearly the same, hybrid (bge)
+  still beats BM25 and is still indistinguishable from bge-small. Retrieval is easier when evidence exists
+  (Hit@5 0.93 versus 0.78 for the hybrid), as expected.
+- **The cross-encoder's deficit disappears.** It is −0.016 on all claims but +0.009 on the 188, and neither
+  difference is significant. The deficit sits in the NEI claims: on those 112 alone the rerank scores
+  −0.057 [−0.115, −0.001] against the hybrid. That NEI-only test was **post hoc** (run after seeing the pattern,
+  uncorrected, borderline), so treat it as a lead, not a finding. A plausible but untested reason: the
+  cross-encoder scores how well a text answers the claim, so abstracts that contain no evidence get pushed down,
+  and for NEI claims those are exactly the abstracts BEIR counts as relevant. This does not change the
+  statement above that the reranker did not help on the BEIR-comparable view; it only says the second view does
+  not show it hurting where evidence exists.
+
 ## Are the differences real? (paired bootstrap on per-query nDCG@10)
 
 10,000 query resamples, seeded. The 95% interval is for the mean per-query nDCG@10 difference (A − B).

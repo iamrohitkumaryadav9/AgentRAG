@@ -41,6 +41,47 @@ def ndcg_at_k(ranking: Sequence[str], relevant: Mapping[str, int], k: int = 10) 
     return dcg / idcg if idcg > 0 else 0.0
 
 
+def hit_at_k(ranking: Sequence[str], relevant: Mapping[str, int], k: int) -> float:
+    """1.0 if any relevant document is in the top ``k``, else 0.0 (a.k.a. success@k)."""
+    return 1.0 if any(relevant.get(doc_id, 0) > 0 for doc_id in ranking[:k]) else 0.0
+
+
+def context_precision_at_k(ranking: Sequence[str], relevant: Mapping[str, int], k: int = 4) -> float:
+    """RAGAS-style context precision@k, with relevance taken from qrels instead of an LLM.
+
+    ``sum_i (precision@i * rel_i) / (relevant documents in the top k)`` over ranks i <= k: it rewards putting
+    relevant context *early*, not just somewhere in the window. Zero when the window holds nothing relevant.
+    """
+    flags = [relevant.get(doc_id, 0) > 0 for doc_id in ranking[:k]]
+    total_relevant = sum(flags)
+    if total_relevant == 0:
+        return 0.0
+    seen, score = 0, 0.0
+    for i, is_relevant in enumerate(flags, start=1):
+        if is_relevant:
+            seen += 1
+            score += seen / i
+    return score / total_relevant
+
+
+def view_metrics(ranking: Sequence[str], relevant: Mapping[str, int]) -> dict[str, float]:
+    """Everything reported in the retrieval 'views' tables, for one query."""
+    return {
+        "ndcg@10": ndcg_at_k(ranking, relevant, 10),
+        "mrr@10": mrr_at_k(ranking, relevant, 10),
+        "recall@5": recall_at_k(ranking, relevant, 5),
+        "recall@50": recall_at_k(ranking, relevant, 50),
+        "recall@100": recall_at_k(ranking, relevant, 100),
+        "hit@1": hit_at_k(ranking, relevant, 1),
+        "hit@5": hit_at_k(ranking, relevant, 5),
+        "hit@10": hit_at_k(ranking, relevant, 10),
+        "context_precision@4": context_precision_at_k(ranking, relevant, 4),
+        # RAGAS "context recall" = share of reference items covered by the retrieved context.
+        # Here the references are the qrels documents, so it equals recall@4.
+        "context_recall@4": recall_at_k(ranking, relevant, 4),
+    }
+
+
 def per_query_metrics(
     run: Run, qrels: Qrels, recall_ks: Sequence[int] = (5, 50, 100)
 ) -> dict[str, dict[str, float]]:
