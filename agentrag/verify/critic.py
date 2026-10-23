@@ -39,7 +39,7 @@ class LlmPolarityChecker:
         self.client, self.prompt_version = client, prompt_version
 
     def relation(self, claim: str, sentences: Sequence[str]) -> RelationResult:
-        prompt = render_relation(claim, sentences)
+        prompt = render_relation(claim, sentences, self.prompt_version)
         try:
             result = self.client.generate(prompt, RelationOutput, prompt_version=self.prompt_version, label="relation")
         except InvalidModelOutput as err:

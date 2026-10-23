@@ -7,5 +7,6 @@ venv/
 .pytest_cache/
 .ruff_cache/
 .bench_cache/
+.verify_state/
 *.egg-info/
 .DS_Store

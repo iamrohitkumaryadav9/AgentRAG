@@ -23,7 +23,7 @@ class Judge:
         self.client, self.prompt_version = client, prompt_version
 
     def judge(self, claim: str, docs: Sequence[Doc], problem: str | None = None) -> JudgeResult:
-        prompt = render_judge(claim, docs, problem)
+        prompt = render_judge(claim, docs, problem, self.prompt_version)
         try:
             result = self.client.generate(prompt, JudgeOutput, prompt_version=self.prompt_version, label="judge")
         except InvalidModelOutput as err:
