@@ -1,0 +1,908 @@
+{
+ "summary": {
+  "comparison": "hybrid-bge vs bm25 on nDCG@10",
+  "queries_lost": 27,
+  "queries_won": 64,
+  "queries_tied": 209,
+  "total_loss": -7.9552,
+  "total_gain": 20.2263,
+  "group_counts": {
+   "dense-blind-spot": 8,
+   "dense-weak": 3,
+   "consensus-demotion": 9
+  },
+  "distinct_driver_docs": 17,
+  "distinct_driver_docs_by_group": {
+   "dense-blind-spot": 6,
+   "dense-weak": 3,
+   "consensus-demotion": 9
+  },
+  "queries_whose_driver_doc_exceeds_512_tokens": 1,
+  "max_driver_doc_tokens": 550,
+  "consensus_demotion_overtakers": 16,
+  "overtakers_in_dense_top5": 16,
+  "overtakers_in_bm25_top5": 16
+ },
+ "queries": [
+  {
+   "qid": "1363",
+   "query": "Venules have a thinner or absent smooth layer compared to arterioles.",
+   "ndcg_diff": -1.0,
+   "driver_doc": "8290953",
+   "driver_doc_start": "Scaffold-based three-dimensional human fibroblast culture provides a s",
+   "driver_doc_tokens": 366,
+   "rank_bm25": 1,
+   "rank_dense": null,
+   "rank_hybrid": 14,
+   "group": "dense-blind-spot",
+   "overtakers": [
+    {
+     "doc": "23513718",
+     "rank_bm25": 3,
+     "rank_dense": 9
+    },
+    {
+     "doc": "79447",
+     "rank_bm25": 5,
+     "rank_dense": 8
+    },
+    {
+     "doc": "6417632",
+     "rank_bm25": 4,
+     "rank_dense": 11
+    },
+    {
+     "doc": "25175997",
+     "rank_bm25": 19,
+     "rank_dense": 1
+    },
+    {
+     "doc": "1122279",
+     "rank_bm25": 2,
+     "rank_dense": 19
+    },
+    {
+     "doc": "3896759",
+     "rank_bm25": 34,
+     "rank_dense": 4
+    },
+    {
+     "doc": "34328964",
+     "rank_bm25": 9,
+     "rank_dense": 64
+    },
+    {
+     "doc": "32797183",
+     "rank_bm25": 35,
+     "rank_dense": 30
+    },
+    {
+     "doc": "2260571",
+     "rank_bm25": 43,
+     "rank_dense": 27
+    },
+    {
+     "doc": "19004126",
+     "rank_bm25": 11,
+     "rank_dense": 97
+    },
+    {
+     "doc": "8446259",
+     "rank_bm25": 42,
+     "rank_dense": 40
+    },
+    {
+     "doc": "34615397",
+     "rank_bm25": 58,
+     "rank_dense": 33
+    },
+    {
+     "doc": "34876410",
+     "rank_bm25": 73,
+     "rank_dense": 47
+    }
+   ]
+  },
+  {
+   "qid": "303",
+   "query": "DMRT1 is a sex-determining gene that is epigenetically regulated by the MHM region.",
+   "ndcg_diff": -0.6309,
+   "driver_doc": "4388470",
+   "driver_doc_start": "Somatic sex identity is cell-autonomous in the chicken In the mammalia",
+   "driver_doc_tokens": 283,
+   "rank_bm25": 2,
+   "rank_dense": null,
+   "rank_hybrid": 17,
+   "group": "dense-blind-spot",
+   "overtakers": [
+    {
+     "doc": "28390999",
+     "rank_bm25": 5,
+     "rank_dense": 6
+    },
+    {
+     "doc": "36708463",
+     "rank_bm25": 6,
+     "rank_dense": 11
+    },
+    {
+     "doc": "4421547",
+     "rank_bm25": 8,
+     "rank_dense": 15
+    },
+    {
+     "doc": "23509593",
+     "rank_bm25": 10,
+     "rank_dense": 17
+    },
+    {
+     "doc": "12232678",
+     "rank_bm25": 4,
+     "rank_dense": 29
+    },
+    {
+     "doc": "10024681",
+     "rank_bm25": 9,
+     "rank_dense": 39
+    },
+    {
+     "doc": "13639330",
+     "rank_bm25": 26,
+     "rank_dense": 20
+    },
+    {
+     "doc": "28928964",
+     "rank_bm25": 77,
+     "rank_dense": 2
+    },
+    {
+     "doc": "13944805",
+     "rank_bm25": 11,
+     "rank_dense": 67
+    },
+    {
+     "doc": "140874",
+     "rank_bm25": 38,
+     "rank_dense": 43
+    },
+    {
+     "doc": "29107180",
+     "rank_bm25": 39,
+     "rank_dense": 42
+    },
+    {
+     "doc": "1243475",
+     "rank_bm25": 46,
+     "rank_dense": 41
+    },
+    {
+     "doc": "17587795",
+     "rank_bm25": 40,
+     "rank_dense": 57
+    },
+    {
+     "doc": "16267205",
+     "rank_bm25": 34,
+     "rank_dense": 87
+    },
+    {
+     "doc": "39481265",
+     "rank_bm25": 67,
+     "rank_dense": 54
+    }
+   ]
+  },
+  {
+   "qid": "295",
+   "query": "Crosstalk between dendritic cells (DCs) and innate lymphoid cells (ILCs) is important in the regulation of intestinal homeostasis.",
+   "ndcg_diff": -0.5693,
+   "driver_doc": "20310709",
+   "driver_doc_start": "The Transcription Factor T-bet Regulates Intestinal Inflammation Media",
+   "driver_doc_tokens": 320,
+   "rank_bm25": 1,
+   "rank_dense": 8,
+   "rank_hybrid": 4,
+   "group": "consensus-demotion",
+   "overtakers": [
+    {
+     "doc": "29423324",
+     "rank_bm25": 2,
+     "rank_dense": 2
+    },
+    {
+     "doc": "24044977",
+     "rank_bm25": 4,
+     "rank_dense": 1
+    },
+    {
+     "doc": "1022115",
+     "rank_bm25": 3,
+     "rank_dense": 3
+    }
+   ]
+  },
+  {
+   "qid": "674",
+   "query": "LDL cholesterol has no involvement in the development of cardiovascular disease.",
+   "ndcg_diff": -0.5693,
+   "driver_doc": "2095573",
+   "driver_doc_start": "LDL-cholesterol concentrations: a genome-wide association study BACKGR",
+   "driver_doc_tokens": 550,
+   "rank_bm25": 1,
+   "rank_dense": 10,
+   "rank_hybrid": 4,
+   "group": "consensus-demotion",
+   "overtakers": [
+    {
+     "doc": "30981192",
+     "rank_bm25": 2,
+     "rank_dense": 1
+    },
+    {
+     "doc": "7662206",
+     "rank_bm25": 5,
+     "rank_dense": 2
+    },
+    {
+     "doc": "9814332",
+     "rank_bm25": 4,
+     "rank_dense": 3
+    }
+   ]
+  },
+  {
+   "qid": "128",
+   "query": "Arterioles have a larger lumen diameter than venules.",
+   "ndcg_diff": -0.5,
+   "driver_doc": "8290953",
+   "driver_doc_start": "Scaffold-based three-dimensional human fibroblast culture provides a s",
+   "driver_doc_tokens": 366,
+   "rank_bm25": 3,
+   "rank_dense": null,
+   "rank_hybrid": 13,
+   "group": "dense-blind-spot",
+   "overtakers": [
+    {
+     "doc": "79447",
+     "rank_bm25": 6,
+     "rank_dense": 10
+    },
+    {
+     "doc": "25175997",
+     "rank_bm25": 10,
+     "rank_dense": 9
+    },
+    {
+     "doc": "6070278",
+     "rank_bm25": 19,
+     "rank_dense": 36
+    },
+    {
+     "doc": "9440748",
+     "rank_bm25": 21,
+     "rank_dense": 54
+    },
+    {
+     "doc": "12899612",
+     "rank_bm25": 29,
+     "rank_dense": 70
+    },
+    {
+     "doc": "40212412",
+     "rank_bm25": 28,
+     "rank_dense": 85
+    },
+    {
+     "doc": "12513972",
+     "rank_bm25": 96,
+     "rank_dense": 25
+    },
+    {
+     "doc": "12549585",
+     "rank_bm25": null,
+     "rank_dense": 1
+    },
+    {
+     "doc": "22867765",
+     "rank_bm25": 81,
+     "rank_dense": 50
+    },
+    {
+     "doc": "9310407",
+     "rank_bm25": null,
+     "rank_dense": 2
+    }
+   ]
+  },
+  {
+   "qid": "1362",
+   "query": "Venules have a larger lumen diameter than arterioles.",
+   "ndcg_diff": -0.5,
+   "driver_doc": "8290953",
+   "driver_doc_start": "Scaffold-based three-dimensional human fibroblast culture provides a s",
+   "driver_doc_tokens": 366,
+   "rank_bm25": 3,
+   "rank_dense": null,
+   "rank_hybrid": 11,
+   "group": "dense-blind-spot",
+   "overtakers": [
+    {
+     "doc": "79447",
+     "rank_bm25": 6,
+     "rank_dense": 12
+    },
+    {
+     "doc": "25175997",
+     "rank_bm25": 10,
+     "rank_dense": 11
+    },
+    {
+     "doc": "9440748",
+     "rank_bm25": 21,
+     "rank_dense": 18
+    },
+    {
+     "doc": "1905095",
+     "rank_bm25": 9,
+     "rank_dense": 67
+    },
+    {
+     "doc": "12899612",
+     "rank_bm25": 29,
+     "rank_dense": 38
+    },
+    {
+     "doc": "6070278",
+     "rank_bm25": 19,
+     "rank_dense": 96
+    },
+    {
+     "doc": "9310407",
+     "rank_bm25": null,
+     "rank_dense": 1
+    },
+    {
+     "doc": "12549585",
+     "rank_bm25": null,
+     "rank_dense": 2
+    }
+   ]
+  },
+  {
+   "qid": "3",
+   "query": "1,000 genomes project enables mapping of genetic sequence variation consisting of rare variants with larger penetrance effects than common variants.",
+   "ndcg_diff": -0.5,
+   "driver_doc": "14717500",
+   "driver_doc_start": "Rare Variants Create Synthetic Genome-Wide Associations Genome-wide as",
+   "driver_doc_tokens": 354,
+   "rank_bm25": 1,
+   "rank_dense": 5,
+   "rank_hybrid": 3,
+   "group": "consensus-demotion",
+   "overtakers": [
+    {
+     "doc": "2739854",
+     "rank_bm25": 3,
+     "rank_dense": 1
+    },
+    {
+     "doc": "23389795",
+     "rank_bm25": 2,
+     "rank_dense": 3
+    }
+   ]
+  },
+  {
+   "qid": "845",
+   "query": "Neutrophil extracellular traps (NETs) are released by ANCA-stimulated neutrophils.",
+   "ndcg_diff": -0.5,
+   "driver_doc": "17741440",
+   "driver_doc_start": "Netting neutrophils in autoimmune small-vessel vasculitis Small-vessel",
+   "driver_doc_tokens": 170,
+   "rank_bm25": 1,
+   "rank_dense": 5,
+   "rank_hybrid": 3,
+   "group": "consensus-demotion",
+   "overtakers": [
+    {
+     "doc": "29399239",
+     "rank_bm25": 2,
+     "rank_dense": 1
+    },
+    {
+     "doc": "9878167",
+     "rank_bm25": 3,
+     "rank_dense": 2
+    }
+   ]
+  },
+  {
+   "qid": "324",
+   "query": "Deleting Raptor reduces G-CSF levels.",
+   "ndcg_diff": -0.4307,
+   "driver_doc": "2014909",
+   "driver_doc_start": "Oncogenic mTOR signaling recruits myeloid-derived suppressor cells to ",
+   "driver_doc_tokens": 282,
+   "rank_bm25": 4,
+   "rank_dense": null,
+   "rank_hybrid": 16,
+   "group": "dense-blind-spot",
+   "overtakers": [
+    {
+     "doc": "24721866",
+     "rank_bm25": 13,
+     "rank_dense": 8
+    },
+    {
+     "doc": "5260382",
+     "rank_bm25": 12,
+     "rank_dense": 10
+    },
+    {
+     "doc": "22174015",
+     "rank_bm25": 17,
+     "rank_dense": 35
+    },
+    {
+     "doc": "654735",
+     "rank_bm25": 8,
+     "rank_dense": 88
+    },
+    {
+     "doc": "30915421",
+     "rank_bm25": 58,
+     "rank_dense": 28
+    },
+    {
+     "doc": "9687772",
+     "rank_bm25": 67,
+     "rank_dense": 33
+    },
+    {
+     "doc": "44562221",
+     "rank_bm25": 66,
+     "rank_dense": 39
+    },
+    {
+     "doc": "23017040",
+     "rank_bm25": 95,
+     "rank_dense": 31
+    },
+    {
+     "doc": "4474874",
+     "rank_bm25": null,
+     "rank_dense": 1
+    },
+    {
+     "doc": "25827024",
+     "rank_bm25": null,
+     "rank_dense": 2
+    },
+    {
+     "doc": "40349336",
+     "rank_bm25": null,
+     "rank_dense": 3
+    },
+    {
+     "doc": "13573143",
+     "rank_bm25": 70,
+     "rank_dense": 64
+    }
+   ]
+  },
+  {
+   "qid": "1024",
+   "query": "Recurrent mutations occur frequently within CTCF anchor sites adjacent to oncogenes.",
+   "ndcg_diff": -0.3691,
+   "driver_doc": "5373138",
+   "driver_doc_start": "3D Chromosome Regulatory Landscape of Human Pluripotent Cells. In this",
+   "driver_doc_tokens": 224,
+   "rank_bm25": 1,
+   "rank_dense": 7,
+   "rank_hybrid": 2,
+   "group": "consensus-demotion",
+   "overtakers": [
+    {
+     "doc": "8494570",
+     "rank_bm25": 3,
+     "rank_dense": 2
+    }
+   ]
+  },
+  {
+   "qid": "507",
+   "query": "Helminths interfere with immune system control of macrophages activated by IL-4 favor Mycobacterium tuberculosis replication.",
+   "ndcg_diff": -0.3691,
+   "driver_doc": "30774694",
+   "driver_doc_start": "T helper 2 cytokines inhibit autophagic control of intracellular Mycob",
+   "driver_doc_tokens": 255,
+   "rank_bm25": 1,
+   "rank_dense": 5,
+   "rank_hybrid": 2,
+   "group": "consensus-demotion",
+   "overtakers": [
+    {
+     "doc": "7433668",
+     "rank_bm25": 2,
+     "rank_dense": 1
+    }
+   ]
+  },
+  {
+   "qid": "690",
+   "query": "Less than 10% of the gabonese children with Schimmelpenning-Feuerstein-Mims syndrome (SFM) had a plasma lactate of more than 5mmol/L.",
+   "ndcg_diff": -0.3299,
+   "driver_doc": "18750453",
+   "driver_doc_start": "Assessment of Volume Depletion in Children with Malaria Background The",
+   "driver_doc_tokens": 311,
+   "rank_bm25": 2,
+   "rank_dense": 99,
+   "rank_hybrid": 9,
+   "group": "dense-blind-spot",
+   "overtakers": [
+    {
+     "doc": "26112696",
+     "rank_bm25": 4,
+     "rank_dense": 6
+    },
+    {
+     "doc": "19487477",
+     "rank_bm25": 24,
+     "rank_dense": 1
+    },
+    {
+     "doc": "9310407",
+     "rank_bm25": 18,
+     "rank_dense": 9
+    },
+    {
+     "doc": "14803797",
+     "rank_bm25": 14,
+     "rank_dense": 22
+    },
+    {
+     "doc": "3770750",
+     "rank_bm25": 35,
+     "rank_dense": 12
+    },
+    {
+     "doc": "10692948",
+     "rank_bm25": 22,
+     "rank_dense": 27
+    },
+    {
+     "doc": "36653415",
+     "rank_bm25": 7,
+     "rank_dense": 57
+    }
+   ]
+  },
+  {
+   "qid": "1179",
+   "query": "The PRR MDA5 has a central DExD/H RNA helices domain.",
+   "ndcg_diff": -0.301,
+   "driver_doc": "31272411",
+   "driver_doc_start": "Immune signaling by RIG-I-like receptors. The RIG-I-like receptors (RL",
+   "driver_doc_tokens": 216,
+   "rank_bm25": 9,
+   "rank_dense": null,
+   "rank_hybrid": 33,
+   "group": "dense-blind-spot",
+   "overtakers": [
+    {
+     "doc": "15419873",
+     "rank_bm25": 17,
+     "rank_dense": 5
+    },
+    {
+     "doc": "20725212",
+     "rank_bm25": 23,
+     "rank_dense": 3
+    },
+    {
+     "doc": "6144337",
+     "rank_bm25": 10,
+     "rank_dense": 17
+    },
+    {
+     "doc": "12149169",
+     "rank_bm25": 18,
+     "rank_dense": 11
+    },
+    {
+     "doc": "20018321",
+     "rank_bm25": 29,
+     "rank_dense": 4
+    },
+    {
+     "doc": "39389082",
+     "rank_bm25": 36,
+     "rank_dense": 8
+    },
+    {
+     "doc": "15327601",
+     "rank_bm25": 38,
+     "rank_dense": 9
+    },
+    {
+     "doc": "24550453",
+     "rank_bm25": 41,
+     "rank_dense": 12
+    },
+    {
+     "doc": "13912224",
+     "rank_bm25": 59,
+     "rank_dense": 7
+    },
+    {
+     "doc": "19822046",
+     "rank_bm25": 12,
+     "rank_dense": 52
+    },
+    {
+     "doc": "7860396",
+     "rank_bm25": 44,
+     "rank_dense": 16
+    },
+    {
+     "doc": "46248894",
+     "rank_bm25": 28,
+     "rank_dense": 30
+    },
+    {
+     "doc": "1383826",
+     "rank_bm25": 26,
+     "rank_dense": 44
+    },
+    {
+     "doc": "26011884",
+     "rank_bm25": 49,
+     "rank_dense": 24
+    },
+    {
+     "doc": "6426919",
+     "rank_bm25": 13,
+     "rank_dense": 80
+    },
+    {
+     "doc": "15893330",
+     "rank_bm25": 27,
+     "rank_dense": 49
+    },
+    {
+     "doc": "15319019",
+     "rank_bm25": 40,
+     "rank_dense": 34
+    },
+    {
+     "doc": "5702790",
+     "rank_bm25": 66,
+     "rank_dense": 21
+    },
+    {
+     "doc": "10443642",
+     "rank_bm25": 25,
+     "rank_dense": 63
+    },
+    {
+     "doc": "4363526",
+     "rank_bm25": 58,
+     "rank_dense": 45
+    },
+    {
+     "doc": "17518195",
+     "rank_bm25": 94,
+     "rank_dense": 31
+    },
+    {
+     "doc": "236204",
+     "rank_bm25": 42,
+     "rank_dense": 75
+    },
+    {
+     "doc": "3033830",
+     "rank_bm25": null,
+     "rank_dense": 2
+    },
+    {
+     "doc": "42865134",
+     "rank_bm25": 92,
+     "rank_dense": 64
+    }
+   ]
+  },
+  {
+   "qid": "1100",
+   "query": "Statins increase blood cholesterol.",
+   "ndcg_diff": -0.2747,
+   "driver_doc": "7662206",
+   "driver_doc_start": "A Century of Cholesterol and Coronaries: From Plaques to Genes to Stat",
+   "driver_doc_tokens": 166,
+   "rank_bm25": 2,
+   "rank_dense": 14,
+   "rank_hybrid": 6,
+   "group": "dense-weak",
+   "overtakers": [
+    {
+     "doc": "22420524",
+     "rank_bm25": 3,
+     "rank_dense": 2
+    },
+    {
+     "doc": "24005548",
+     "rank_bm25": 4,
+     "rank_dense": 4
+    },
+    {
+     "doc": "7454794",
+     "rank_bm25": 9,
+     "rank_dense": 3
+    },
+    {
+     "doc": "9617381",
+     "rank_bm25": 5,
+     "rank_dense": 8
+    }
+   ]
+  },
+  {
+   "qid": "1099",
+   "query": "Statins decrease blood cholesterol.",
+   "ndcg_diff": -0.2003,
+   "driver_doc": "7662206",
+   "driver_doc_start": "A Century of Cholesterol and Coronaries: From Plaques to Genes to Stat",
+   "driver_doc_tokens": 166,
+   "rank_bm25": 2,
+   "rank_dense": 8,
+   "rank_hybrid": 4,
+   "group": "consensus-demotion",
+   "overtakers": [
+    {
+     "doc": "22420524",
+     "rank_bm25": 3,
+     "rank_dense": 1
+    },
+    {
+     "doc": "7454794",
+     "rank_bm25": 4,
+     "rank_dense": 4
+    }
+   ]
+  },
+  {
+   "qid": "619",
+   "query": "Increased vessel density along with a reduction in fibrosis decreases the efficacy of chemotherapy treatments.",
+   "ndcg_diff": -0.1497,
+   "driver_doc": "20888849",
+   "driver_doc_start": "Inhibition of Hedgehog signaling enhances delivery of chemotherapy in ",
+   "driver_doc_tokens": 223,
+   "rank_bm25": 2,
+   "rank_dense": 44,
+   "rank_hybrid": 5,
+   "group": "dense-weak",
+   "overtakers": [
+    {
+     "doc": "1171121",
+     "rank_bm25": 9,
+     "rank_dense": 1
+    },
+    {
+     "doc": "6334188",
+     "rank_bm25": 10,
+     "rank_dense": 3
+    },
+    {
+     "doc": "25175997",
+     "rank_bm25": 6,
+     "rank_dense": 20
+    },
+    {
+     "doc": "195680777",
+     "rank_bm25": 30,
+     "rank_dense": 7
+    }
+   ]
+  },
+  {
+   "qid": "1019",
+   "query": "Rapid phosphotransfer rates govern fidelity in two component systems",
+   "ndcg_diff": -0.1309,
+   "driver_doc": "11603066",
+   "driver_doc_start": "Using Structural Information to Change the Phosphotransfer Specificity",
+   "driver_doc_tokens": 421,
+   "rank_bm25": 2,
+   "rank_dense": 3,
+   "rank_hybrid": 3,
+   "group": "consensus-demotion",
+   "overtakers": [
+    {
+     "doc": "196664003",
+     "rank_bm25": 3,
+     "rank_dense": 1
+    }
+   ]
+  },
+  {
+   "qid": "727",
+   "query": "Ly6C hi monocytes have a lower inflammatory capacity compared to their Ly6C lo counterparts.",
+   "ndcg_diff": -0.1309,
+   "driver_doc": "7521113",
+   "driver_doc_start": "Fate mapping reveals origins and dynamics of monocytes and tissue macr",
+   "driver_doc_tokens": 265,
+   "rank_bm25": 2,
+   "rank_dense": 6,
+   "rank_hybrid": 3,
+   "group": "consensus-demotion",
+   "overtakers": [
+    {
+     "doc": "14492339",
+     "rank_bm25": 3,
+     "rank_dense": 2
+    }
+   ]
+  },
+  {
+   "qid": "314",
+   "query": "Deamination of cytidine to uridine on the minus strand of viral DNA results in catastrophic G-to-A mutations in the viral genome.",
+   "ndcg_diff": -0.1131,
+   "driver_doc": "4347374",
+   "driver_doc_start": "Broad antiretroviral defence by human APOBEC3G through lethal editing ",
+   "driver_doc_tokens": 325,
+   "rank_bm25": 3,
+   "rank_dense": 21,
+   "rank_hybrid": 5,
+   "group": "dense-weak",
+   "overtakers": [
+    {
+     "doc": "25787749",
+     "rank_bm25": 13,
+     "rank_dense": 5
+    },
+    {
+     "doc": "14376683",
+     "rank_bm25": 4,
+     "rank_dense": 15
+    }
+   ]
+  },
+  {
+   "qid": "452",
+   "query": "Gene expression does not vary appreciably across genetically identical cells.",
+   "ndcg_diff": -0.0882,
+   "driver_doc": "464511",
+   "driver_doc_start": "Memory and Modularity in Cell-Fate Decision Making Genetically identic",
+   "driver_doc_tokens": 213,
+   "rank_bm25": 3,
+   "rank_dense": 90,
+   "rank_hybrid": 6,
+   "group": "dense-blind-spot",
+   "overtakers": [
+    {
+     "doc": "16237005",
+     "rank_bm25": 6,
+     "rank_dense": 28
+    },
+    {
+     "doc": "40254495",
+     "rank_bm25": 11,
+     "rank_dense": 21
+    },
+    {
+     "doc": "12232678",
+     "rank_bm25": 12,
+     "rank_dense": 25
+    },
+    {
+     "doc": "1852826",
+     "rank_bm25": 13,
+     "rank_dense": 38
+    },
+    {
+     "doc": "18333304",
+     "rank_bm25": 10,
+     "rank_dense": 45
+    }
+   ]
+  }
+ ]
+}
