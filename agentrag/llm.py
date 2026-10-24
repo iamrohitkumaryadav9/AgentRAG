@@ -53,21 +53,40 @@ Question: {query}
 
 
 class GeminiLLM(LLM):
-    """Real LLM generation via the current `google-genai` SDK."""
+    """Real LLM generation through the shared Gemini client.
+
+    Requests go through ``agentrag.verify.gemini.GeminiClient``, so a transient 503 or a rate-limit 429
+    is retried with exponential backoff (and a 429's own retry delay is honoured) instead of crashing the
+    agent graph, and a malformed JSON reply gets one repair attempt. The request itself is unchanged: JSON
+    mode with the schema described in the prompt, default thinking.
+    """
 
     backend_name = "gemini"
 
-    def __init__(self, model_name: str | None = None, api_key: str | None = None) -> None:
-        from google import genai
+    def __init__(self, model_name: str | None = None, api_key: str | None = None, client=None) -> None:
+        from .verify.gemini import GeminiClient, GenaiTransport
 
-        api_key = api_key or settings.google_api_key
-        if not api_key:
-            raise RuntimeError("GOOGLE_API_KEY is not set")
-        self._client = genai.Client(api_key=api_key)
-        self._model_name = model_name or settings.gemini_model
+        if client is None:
+            from .verify.cache import ResponseCache
+            from .verify.ratelimit import Limits, RateLimiter
+
+            api_key = api_key or settings.google_api_key
+            if not api_key:
+                raise RuntimeError("GOOGLE_API_KEY is not set")
+            model = model_name or settings.gemini_model
+            client = GeminiClient(
+                model,
+                ResponseCache(None, enabled=False),  # a service must not accumulate every prompt in memory
+                RateLimiter(Limits(rpm=None, tpm=None, rpd=None)),  # rely on the server's 429 + backoff
+                GenaiTransport(model, api_key, native_schema=False),
+                thinking="default",
+            )
+        self._client = client
 
     def generate(self, query: str, context_chunks: List[Chunk], feedback: str | None = None) -> AnswerPayload:
         import json
+
+        from .verify.gemini import InvalidModelOutput
 
         context = "\n\n".join(f"[{c.source}#{c.position}] {c.text}" for c in context_chunks)
         feedback_block = (
@@ -81,12 +100,18 @@ class GeminiLLM(LLM):
             query=query,
             feedback_block=feedback_block,
         )
-        response = self._client.models.generate_content(
-            model=self._model_name,
-            contents=prompt,
-            config={"response_mime_type": "application/json"},
-        )
-        return parse_answer_payload(response.text or "")
+        try:
+            result = self._client.generate(prompt, AnswerPayload, prompt_version="qa-v1", label="qa")
+        except InvalidModelOutput as err:
+            # Still not valid JSON after a repair attempt: degrade to a plain-text answer, as before.
+            return parse_answer_payload(err.raw)
+        if result.parsed is None:  # the API blocked the response
+            return AnswerPayload(
+                answer="I don't have enough information to answer that (the model response was blocked).",
+                citations=[],
+                confidence=0.0,
+            )
+        return result.parsed
 
 
 class ExtractiveLLM(LLM):
