@@ -27,6 +27,7 @@ dependencies = [
 [project.optional-dependencies]
 dense = ["sentence-transformers>=3.0", "faiss-cpu>=1.8"]
 gemini = ["google-genai>=0.3"]
+app = ["streamlit>=1.40"]  # the Streamlit demo (app.py); requirements.txt is its Cloud-deployment equivalent
 # Claim verification (scripts/run_verification.py): Gemini judge + NLI critic. Pinned for reproducibility;
 # not installed by CI, whose tests use a fake transport.
 verify = [

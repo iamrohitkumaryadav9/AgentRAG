@@ -37,7 +37,7 @@ jobs:
       - name: Install package and dev dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -e ".[dev,app]"
 
       - name: Lint (ruff)
         run: ruff check .

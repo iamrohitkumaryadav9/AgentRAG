@@ -1,20 +1,17 @@
+# Lightweight runtime for the Streamlit demo (app.py) on Streamlit Community Cloud.
+# No torch / sentence-transformers / faiss: the demo runs BM25 retrieval, which needs only scikit-learn + scipy.
+# For the optional "Hybrid (BM25 + bge-small)" toggle, install the extra locally: pip install -e ".[dense]"
+# (the toggle is hidden when those packages are absent). Dev tools and benchmark pins live in pyproject.toml extras.
+streamlit>=1.40
 langgraph>=1.2,<2.0
 langchain-core>=1.4,<2.0
-fastapi>=0.115,<1.0
-uvicorn[standard]>=0.30,<1.0
 pydantic>=2.7,<3.0
 python-dotenv>=1.0,<2.0
 scikit-learn>=1.4,<2.0
 scipy>=1.11
 numpy>=1.26,<3.0
 pypdf>=4.0,<6.0
-
-# Optional: dense semantic retrieval (auto-fallback to TF-IDF if unavailable)
-sentence-transformers>=3.0
-faiss-cpu>=1.8
-
-# Optional: real LLM generation via Gemini (auto-fallback to offline extractive LLM)
 google-genai>=0.3
-
-# Dev / testing
-pytest>=8.0,<9.0
+tzdata
+opentelemetry-api>=1.24
+opentelemetry-sdk>=1.24

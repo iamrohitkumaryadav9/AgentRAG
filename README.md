@@ -28,6 +28,45 @@ Everything also runs **fully offline** (BM25 retrieval + a deterministic extract
 and try it with no API keys. CI runs ruff, the offline test suite and a toy-corpus smoke test on every push, and
 every agent step is traced with **OpenTelemetry**.
 
+## Live demo
+
+**Try it in the browser: https://YOUR-APP-NAME.streamlit.app** *(placeholder: replace with the URL Streamlit assigns after you deploy)*
+
+A Streamlit app (`app.py`) lets you upload PDF / Markdown / text files, or press **Use sample docs**, and ask
+questions. For every question it shows the answer, citations with source snippets, the critic's verdict and
+grounding score, the attempt count, the router path (direct / refuse / answer), and a per-agent trace with latency.
+
+* **Offline by default.** With no API key the app uses BM25 retrieval and the extractive generator (shown as
+  "Offline mode"). Paste a Gemini key in the sidebar to switch to Gemini generation.
+* **Your key stays yours.** It is held only in your browser session's memory and passed straight to the Gemini
+  client. It is never stored, logged, cached, written to disk or put in an environment variable, and the app writes
+  no files at runtime. Closing the tab discards it.
+* **Index caps, by total chunks (not file count):** 5,000 chunks with BM25 and 1,000 with hybrid retrieval, plus
+  50 MB per file (`.streamlit/config.toml`). If a cap is hit, the app indexes up to it and tells you exactly how
+  much of which file was indexed and what was left out. Override with `AGENTRAG_APP_MAX_CHUNKS_BM25` /
+  `AGENTRAG_APP_MAX_CHUNKS_HYBRID`. Questions are limited to 1,000 characters.
+* **Hybrid toggle.** "Hybrid (BM25 + bge-small)" is enabled only when the `dense` extra is installed. The Cloud
+  deployment is deliberately lightweight (no torch), so it uses BM25.
+
+### Run it locally
+
+```bash
+pip install -r requirements.txt        # lightweight; or: pip install -e ".[app,gemini]"
+streamlit run app.py
+# optional hybrid retrieval: pip install -e ".[dense]"
+```
+
+### Deploy on Streamlit Community Cloud
+
+1. Push this repository to GitHub (it must be readable by your Streamlit account).
+2. Sign in at [share.streamlit.io](https://share.streamlit.io) with GitHub and click **Create app**.
+3. Choose **Deploy a public app from GitHub**, then set Repository `iamrohitkumaryadav9/AgentRAG`,
+   Branch `main`, and Main file path `app.py`.
+4. Open **Advanced settings** and select **Python 3.12**. Add no secrets: visitors bring their own keys.
+5. Click **Deploy**. Dependencies come from `requirements.txt`, and the theme and upload limit from
+   `.streamlit/config.toml`. The first build takes a few minutes.
+6. Copy the app URL into the placeholder at the top of this section.
+
 ## Architecture
 
 ```
@@ -376,10 +415,12 @@ agentrag/
   evaluation.py     golden-set eval harness and quality thresholds
   graph.py          the LangGraph multi-agent workflow
   api.py            FastAPI service
+  app_support.py    logic behind the Streamlit demo (index caps, key-safe LLM factory, friendly errors)
   bench/            SciFact retrieval ablation: metrics, bootstrap stats, systems, error analysis
   verify/           claim verification: judge, critic (rules, polarity check, NEI recheck), LangGraph retry loop,
                     cached rate-limited Gemini client, hard budget + tripwires, metrics
 cli.py              terminal demo
+app.py              Streamlit demo (see Live demo); requirements.txt is its lightweight deploy list
 scripts/            index builder, eval runner, retrieval ablation runners, run_verification.py (tune / freeze / run),
                     summarize_verification.py
 tests/              pytest suite (offline, no external calls, fake Gemini transport)

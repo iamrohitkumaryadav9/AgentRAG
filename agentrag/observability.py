@@ -21,7 +21,9 @@ Set ``AGENTRAG_OTEL_CONSOLE=1`` to also print raw spans to stdout, or point
 """
 from __future__ import annotations
 
+import contextvars
 import os
+import threading
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -34,13 +36,19 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExport
 
 _TRACER_NAME = "agentrag"
 _initialised = False
+_init_lock = threading.Lock()
 
 
 def _init_tracing() -> None:
     global _initialised
-    if _initialised:
-        return
+    with _init_lock:  # concurrent sessions (e.g. a web app) may all hit the first call at once
+        if _initialised:
+            return
+        _install_provider()
+        _initialised = True
 
+
+def _install_provider() -> None:
     provider = TracerProvider(resource=Resource.create({"service.name": "agentrag"}))
 
     if os.getenv("AGENTRAG_OTEL_CONSOLE") == "1":
@@ -56,7 +64,6 @@ def _init_tracing() -> None:
             pass
 
     trace.set_tracer_provider(provider)
-    _initialised = True
 
 
 def get_tracer():
@@ -107,20 +114,23 @@ class RunMetrics:
         }
 
 
-_current_metrics: RunMetrics | None = None
+# Request-scoped: each thread / async task has its own value, so concurrent requests (web sessions, API calls)
+# collect their own spans and never see each other's. A module-level global would let the second request to
+# start overwrite the first one's collector.
+_current_metrics: contextvars.ContextVar[RunMetrics | None] = contextvars.ContextVar(
+    "agentrag_current_metrics", default=None
+)
 
 
 @contextmanager
 def collect_metrics() -> Iterator[RunMetrics]:
-    """Collect all spans emitted inside this block into one RunMetrics."""
-    global _current_metrics
-    previous = _current_metrics
+    """Collect all spans emitted inside this block (in this request's context) into one RunMetrics."""
     metrics = RunMetrics()
-    _current_metrics = metrics
+    token = _current_metrics.set(metrics)
     try:
         yield metrics
     finally:
-        _current_metrics = previous
+        _current_metrics.reset(token)
 
 
 @contextmanager
@@ -149,11 +159,10 @@ def traced_node(name: str, **attributes: Any) -> Iterator[Dict[str, Any]]:
                     span.set_attribute(f"agentrag.{key}", value)
             span.set_attribute("agentrag.duration_ms", round(duration_ms, 2))
 
-            if _current_metrics is not None:
+            collector = _current_metrics.get()
+            if collector is not None:
                 merged = {f"agentrag.{k}": v for k, v in {**attributes, **extra}.items() if v is not None}
-                _current_metrics.spans.append(
-                    SpanRecord(name=name, duration_ms=round(duration_ms, 2), attributes=merged)
-                )
+                collector.spans.append(SpanRecord(name=name, duration_ms=round(duration_ms, 2), attributes=merged))
 
 
 def estimate_tokens(text: str) -> int:

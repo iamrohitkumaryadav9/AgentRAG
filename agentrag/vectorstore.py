@@ -97,12 +97,14 @@ class DenseVectorStore(VectorStore):
 
     backend_name = "dense-faiss"
 
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2", query_prefix: str = "") -> None:
+    def __init__(self, model_name: str = "all-MiniLM-L6-v2", query_prefix: str = "", model=None) -> None:
+        """``model``: an already-loaded SentenceTransformer, so a server can load the weights once and share
+        them between many indexes instead of loading them per index."""
         import faiss
         from sentence_transformers import SentenceTransformer
 
         self._faiss = faiss
-        self._model = SentenceTransformer(model_name)
+        self._model = model if model is not None else SentenceTransformer(model_name)
         self._query_prefix = query_prefix
         self._index = None
         self._chunks: List[Chunk] = []

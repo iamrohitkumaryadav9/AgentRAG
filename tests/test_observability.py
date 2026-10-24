@@ -40,3 +40,56 @@ def test_query_run_emits_span_per_agent_node():
 def test_estimate_tokens_scales_with_length():
     assert estimate_tokens("") == 1
     assert estimate_tokens("a" * 400) > estimate_tokens("a" * 40)
+
+
+def test_concurrent_runs_collect_only_their_own_spans():
+    """Two requests overlap inside the synthesizer; each must still report exactly its own four agent spans."""
+    import threading
+
+    barrier = threading.Barrier(2, timeout=30)
+
+    class MeetingLLM(ExtractiveLLM):
+        def generate(self, query, context_chunks, feedback=None):
+            barrier.wait()  # neither run can finish its synthesizer until both are inside theirs
+            return super().generate(query, context_chunks, feedback)
+
+    store = _built_store()
+    results, errors = {}, []
+
+    def run(name, question):
+        try:
+            results[name] = run_query(store, question, llm=MeetingLLM())
+        except Exception as exc:  # noqa: BLE001 - surfaced by the assertions below
+            errors.append(exc)
+
+    threads = [
+        threading.Thread(target=run, args=("a", "What is retrieval-augmented generation?")),
+        threading.Thread(target=run, args=("b", "How do guardrails work in production AI systems?")),
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=60)
+
+    assert not errors and set(results) == {"a", "b"}
+    for name in ("a", "b"):
+        spans = results[name]["metrics"].spans
+        assert [s.name for s in spans] == ["router", "retriever", "synthesizer", "critic"], name
+        assert results[name]["metrics"].total_ms > 0
+    # the two runs retrieved different things, so their retriever spans must differ in what they recorded
+    a, b = (results[n]["metrics"].spans[1].attributes for n in ("a", "b"))
+    assert a["agentrag.top_score"] != b["agentrag.top_score"]
+
+
+def test_metrics_do_not_leak_out_of_the_block_or_across_blocks():
+    from agentrag.observability import _current_metrics
+
+    with collect_metrics() as outer:
+        with collect_metrics() as inner:
+            with traced_node("inner-only"):
+                pass
+        with traced_node("outer-only"):
+            pass
+    assert [s.name for s in inner.spans] == ["inner-only"]
+    assert [s.name for s in outer.spans] == ["outer-only"]
+    assert _current_metrics.get() is None

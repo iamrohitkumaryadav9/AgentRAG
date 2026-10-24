@@ -1,0 +1,14 @@
+[server]
+maxUploadSize = 50          # MB per file
+headless = true
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "light"
+primaryColor = "#2f5d8a"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f3f6fa"
+textColor = "#1f2933"
+font = "sans serif"

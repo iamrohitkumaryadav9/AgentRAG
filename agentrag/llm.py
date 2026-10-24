@@ -63,23 +63,38 @@ class GeminiLLM(LLM):
 
     backend_name = "gemini"
 
-    def __init__(self, model_name: str | None = None, api_key: str | None = None, client=None) -> None:
+    def __init__(
+        self,
+        model_name: str | None = None,
+        api_key: str | None = None,
+        client=None,
+        *,
+        max_retries: int = 5,
+        timeout_seconds: float = 120.0,
+    ) -> None:
+        """``api_key``: when given, it is used as-is and the environment is never consulted (a hosted app passes
+        each visitor's own key this way). Only when it is ``None`` does the CLI/API fall back to GOOGLE_API_KEY.
+        ``max_retries`` / ``timeout_seconds`` bound how long a transient error can hold up a caller."""
         from .verify.gemini import GeminiClient, GenaiTransport
 
         if client is None:
             from .verify.cache import ResponseCache
             from .verify.ratelimit import Limits, RateLimiter
 
-            api_key = api_key or settings.google_api_key
+            if api_key is None:
+                api_key = settings.google_api_key
             if not api_key:
-                raise RuntimeError("GOOGLE_API_KEY is not set")
+                raise RuntimeError("no Gemini API key was provided")
             model = model_name or settings.gemini_model
+            # No response cache (it would grow without bound in a service and must never be shared between users),
+            # no spend ledger and no budget file: this path writes nothing to disk.
             client = GeminiClient(
                 model,
-                ResponseCache(None, enabled=False),  # a service must not accumulate every prompt in memory
+                ResponseCache(None, enabled=False),
                 RateLimiter(Limits(rpm=None, tpm=None, rpd=None)),  # rely on the server's 429 + backoff
-                GenaiTransport(model, api_key, native_schema=False),
+                GenaiTransport(model, api_key, timeout_seconds=timeout_seconds, native_schema=False),
                 thinking="default",
+                max_retries=max_retries,
             )
         self._client = client
 
