@@ -160,3 +160,46 @@ def test_validation_items_pair_gold_rationales_with_the_claim_and_with_a_differe
         assert item["expected"] == "neutral" and item["claim"] != original.text
         assert item["sentences"] == next(g["sentences"] for g in gold if g["id"] == item["id"])
     assert items == validation_items(sf, claims, seed=1)  # deterministic
+
+
+def test_declared_family_applies_holm_across_primary_and_secondary_tests_and_excludes_exploratory_pairs():
+    from agentrag.verify.experiment import (
+        EXPLORATORY_COMPARISONS,
+        PRIMARY_COMPARISONS,
+        SECONDARY_COMPARISONS,
+        declared_family,
+    )
+
+    def result(p):
+        return {"mean_diff": 0.1, "ci_low": 0.0, "ci_high": 0.2, "p_value": p}
+
+    comparisons = {
+        "B1 - B0 | keep | macro_f1": result(0.001),
+        "B1 - B0 | keep | contradiction_recall": result(0.04),
+        "N - B0 | keep | macro_f1": result(0.02),
+        "N - B0 | keep | contradiction_recall": result(0.5),
+        "B1 - B2 | keep | macro_f1": result(0.9),
+        "B1 - B0 | abstain | macro_f1": result(0.0001),       # not the primary policy: outside the family
+        "B3 - B0 | keep | macro_f1": result(0.0001),           # exploratory: outside the family
+        "oracle - B0 | keep | macro_f1": result(0.0001),
+    }
+    rows = declared_family(comparisons)
+    assert [(r["tier"], r["comparison"], r["metric"]) for r in rows] == [
+        ("primary", "B1 - B0", "macro_f1"),
+        ("primary", "B1 - B0", "contradiction_recall"),
+        ("secondary", "N - B0", "macro_f1"),
+        ("secondary", "N - B0", "contradiction_recall"),
+        ("secondary", "B1 - B2", "macro_f1"),
+    ]
+    # sorted p: .001 .02 .04 .5 .9  ->  x5, x4, x3, x2, x1 with a running maximum, capped at 1
+    adjusted = {(r["comparison"], r["metric"]): r["p_holm"] for r in rows}
+    assert adjusted[("B1 - B0", "macro_f1")] == pytest.approx(0.005)
+    assert adjusted[("N - B0", "macro_f1")] == pytest.approx(0.08)
+    assert adjusted[("B1 - B0", "contradiction_recall")] == pytest.approx(0.12)
+    assert adjusted[("N - B0", "contradiction_recall")] == 1.0
+    assert adjusted[("B1 - B2", "macro_f1")] == 1.0
+    assert all(r["p_holm"] >= r["p_value"] for r in rows)
+
+    assert ("N", "B0") in SECONDARY_COMPARISONS and PRIMARY_COMPARISONS == (("B1", "B0"),)
+    assert not set(EXPLORATORY_COMPARISONS) & (set(PRIMARY_COMPARISONS) | set(SECONDARY_COMPARISONS))
+    assert len(PRIMARY_COMPARISONS) + len(SECONDARY_COMPARISONS) == 8  # 8 comparisons x 2 metrics = 16 tests

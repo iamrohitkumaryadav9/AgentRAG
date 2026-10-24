@@ -52,8 +52,12 @@ from agentrag.verify.budget import Budget, BudgetExceeded, TripwireError, budget
 from agentrag.verify.cache import ResponseCache, find_secrets
 from agentrag.verify.critic import Critic, LlmPolarityChecker
 from agentrag.verify.experiment import (
+    EXPLORATORY_COMPARISONS,
     NEI_TAU_GRID,
+    PRIMARY_COMPARISONS,
+    SECONDARY_COMPARISONS,
     claim_record,
+    declared_family,
     docs_for,
     evaluate_arm,
     nli_only_verdict,
@@ -231,10 +235,8 @@ def run_parallel(label: str, items: Sequence, fn: Callable, workers: int, client
 def compare(claims, outcomes_by_arm) -> dict:
     gold = [c.label for c in claims]
     out: dict = {}
-    # Pairs chosen so each component's effect is isolated: N vs B3 is the NEI recheck alone; B1 vs B1p and
-    # B2 vs B2p are the recheck added to each polarity critic; the *p arms vs B0 are the polarity checks alone.
-    pairs = (("B3", "B0"), ("N", "B3"), ("B1p", "B0"), ("B2p", "B0"), ("B1", "B1p"), ("B2", "B2p"),
-             ("B1", "B0"), ("B2", "B0"), ("B1", "B2"))
+    # The declared family (primary + secondary, see the freeze file) plus clearly-labelled exploratory pairs.
+    pairs = PRIMARY_COMPARISONS + SECONDARY_COMPARISONS + EXPLORATORY_COMPARISONS
     for a, b in pairs:
         if a not in outcomes_by_arm or b not in outcomes_by_arm:
             continue
@@ -242,7 +244,7 @@ def compare(claims, outcomes_by_arm) -> dict:
             pa = [getter(o) for o in outcomes_by_arm[a]]
             pb = [getter(o) for o in outcomes_by_arm[b]]
             for name, metric in (("macro_f1", macro_f1), ("contradiction_recall", contradiction_recall)):
-                out[f"{a} - {b} | {policy} | {name}"] = paired_bootstrap_metric(gold, pa, pb, metric, n_boot=5000)
+                out[f"{a} - {b} | {policy} | {name}"] = paired_bootstrap_metric(gold, pa, pb, metric, n_boot=10_000)
     return out
 
 
@@ -393,6 +395,7 @@ def run_stage(args) -> int:
                     for c, o in zip(claims, outcomes, strict=True)
                 ],
             }
+            outcomes_by_arm["oracle"] = outcomes
             oracle_f1 = results["arms"]["oracle"]["metrics"]["final_keep"]["macro_f1"]
             print(f"oracle: macro-F1 {oracle_f1:.3f}")
 
@@ -414,6 +417,10 @@ def run_stage(args) -> int:
             print(f"A (NLI only, tau={tau_a}): macro-F1 {summary['macro_f1']:.3f}")
 
         results["comparisons"] = compare(claims, outcomes_by_arm)
+        results["declared_comparisons"] = declared_family(results["comparisons"])
+        for row in results["declared_comparisons"]:
+            print(f"  [{row['tier']}] {row['comparison']:<9} {row['metric']:<22} {row['mean_diff']:+.3f} "
+                  f"[{row['ci_low']:+.3f}, {row['ci_high']:+.3f}]  p={row['p_value']:.4f}  Holm p={row['p_holm']:.4f}")
         if args.validation_gold or args.validation_shuffled or nli_checker:
             results["checker_validation"] = validate_checkers(args, sf, claims, client, nli_checker)
             print("checker validation:", json.dumps(results["checker_validation"])[:700])
@@ -473,13 +480,21 @@ def freeze_stage(args) -> int:
         "nei_recheck_decision": {"kept": rule_kept, "tuning": nei},
         "pre_declared_analysis": {
             "primary": ["B1 - B0: macro-F1 (keep policy)", "B1 - B0: contradiction recall (keep policy)"],
-            "secondary_isolating_components": [
-                "N - B3 (the NEI recheck alone)", "B1p - B0 and B2p - B0 (polarity checks alone)",
-                "B1 - B1p and B2 - B2p (the recheck added to each polarity check)", "B1 - B2 (LLM vs NLI critic)",
+            "secondary_pre_registered": [
+                "N - B0 (the NEI recheck alone vs no critic; added by amendment before the dev run)",
+                "N - B3 (the NEI recheck alone vs citation rules)",
+                "B1p - B0 and B2p - B0 (polarity checks alone)",
+                "B1 - B1p and B2 - B2p (the recheck added to each polarity check)",
+                "B1 - B2 (LLM vs NLI critic)",
             ],
-            "method": "paired bootstrap over claims, 5000 resamples, 95% percentile intervals; the abstain policy is "
-                      "reported alongside. Secondary comparisons are exploratory and uncorrected.",
-            "no_changes_after_freeze": "no prompt, rule, threshold or policy changes once the dev run starts; "
+            "metrics": ["macro-F1", "contradiction recall"],
+            "correction": "Holm across ALL declared tests (primary and secondary, both metrics, keep policy): "
+                          "8 comparisons x 2 metrics = 16 tests, one family",
+            "method": "paired bootstrap over claims, 10,000 resamples, 95% percentile intervals; two-sided bootstrap "
+                      "p-values; the abstain policy is reported alongside but is not part of the corrected family",
+            "exploratory": "everything else, including B3 - B0, B2 - B0, oracle - B0, per-class breakdowns and any "
+                           "analysis done after seeing the dev results, is labelled exploratory",
+            "no_changes_after_freeze": "no prompt, rule, threshold, arm or policy changes based on dev results; "
                                        "the dev run executes once",
         },
         "train_evidence": evidence,
@@ -499,8 +514,22 @@ def freeze_stage(args) -> int:
             "--phase dev --phase-cap-inr 250"
         ),
     }
+    if FREEZE_PATH.exists():
+        previous = load_json(FREEZE_PATH)
+        if previous["fingerprint"] != fingerprint:
+            sys.exit(f"refusing to amend: the configuration fingerprint changed ({previous['fingerprint']} -> "
+                     f"{fingerprint}); an amendment may only change the analysis plan, never the configuration")
+        if not args.amendment:
+            sys.exit("a freeze already exists; pass --amendment 'what changed and why' to amend it")
+        freeze["frozen_at"] = previous["frozen_at"]  # the original freeze time is kept
+        freeze["amendments"] = [*previous.get("amendments", []), {
+            "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "change": args.amendment,
+            "configuration_fingerprint_unchanged": fingerprint,
+        }]
     FREEZE_PATH.write_text(json.dumps(freeze, indent=1), encoding="utf-8")
-    print(f"froze fingerprint {fingerprint}\n{json.dumps(freeze['config'], indent=1)}")
+    print(f"freeze written, fingerprint {fingerprint}"
+          + (f" ({len(freeze['amendments'])} amendment(s))" if "amendments" in freeze else ""))
     return 0
 
 
@@ -528,6 +557,7 @@ def main() -> int:
     p.add_argument("--validation-shuffled", type=int, default=0, help="LLM-checker shuffled-claim negative controls")
     p.add_argument("--evidence", nargs="*", default=[], help="train result labels to record in the freeze file")
     p.add_argument("--train-final", default="v1-final", help="final train result label to cite in the freeze")
+    p.add_argument("--amendment", default=None, help="amend an existing freeze: what changed and why")
     args = p.parse_args()
     args.workers = max(1, min(8, args.workers))
 

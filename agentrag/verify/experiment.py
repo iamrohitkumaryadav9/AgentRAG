@@ -222,6 +222,39 @@ def tune_nli_only_tau(
     return {"tau": best, "macro_f1": table[best], "grid": {str(t): v for t, v in table.items()}, "n": len(samples)}
 
 
+# -- the pre-declared comparison family (frozen before the dev run) -------------------------------
+
+PRIMARY_COMPARISONS = (("B1", "B0"),)
+# N - B0 was added by an amendment to the freeze, before the dev run, after the train subset showed the NEI recheck
+# alone to be the only helpful component. The rest isolate each component's effect.
+SECONDARY_COMPARISONS = (
+    ("N", "B0"), ("N", "B3"), ("B1p", "B0"), ("B2p", "B0"), ("B1", "B1p"), ("B2", "B2p"), ("B1", "B2"),
+)
+# Computed and reported, but not declared in advance and therefore outside the corrected family: exploratory.
+EXPLORATORY_COMPARISONS = (("B3", "B0"), ("B2", "B0"), ("oracle", "B0"))
+DECLARED_METRICS = ("macro_f1", "contradiction_recall")
+
+
+def declared_family(comparisons: Mapping[str, Mapping]) -> list[dict]:
+    """Holm-adjust the keep-policy bootstrap tests of every declared comparison and metric (one family).
+
+    ``comparisons`` maps ``"A - B | keep | metric"`` to a ``paired_bootstrap_metric`` result. Holm controls the
+    family-wise error rate across all declared tests (primary and secondary, both metrics) at once.
+    """
+    from agentrag.bench.stats import holm_adjust
+
+    rows = []
+    for tier, pairs in (("primary", PRIMARY_COMPARISONS), ("secondary", SECONDARY_COMPARISONS)):
+        for a, b in pairs:
+            for metric in DECLARED_METRICS:
+                key = f"{a} - {b} | keep | {metric}"
+                if key in comparisons:
+                    rows.append({"tier": tier, "comparison": f"{a} - {b}", "metric": metric, **comparisons[key]})
+    for row, adjusted in zip(rows, holm_adjust([r["p_value"] for r in rows]), strict=True):
+        row["p_holm"] = adjusted
+    return rows
+
+
 # -- the NOT_ENOUGH_INFO recheck: choosing its threshold from stored retry outcomes ----------------
 
 NEI_TAU_GRID = (0.5, 0.7, 0.9, 0.95, 0.98)
