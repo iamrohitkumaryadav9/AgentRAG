@@ -7,8 +7,10 @@ Rules (defaults are the ones set for the SciFact verification study):
   run continues from where the last one stopped (it cannot "forget" what was spent);
 * every in-flight request *reserves* the worst-case cost of one call before it is sent, so N concurrent
   workers can never overshoot the cap by more than the reservations already accounted for;
-* tripwire: a single call that costs more than ``tripwire_usd`` (2x the ~$0.002 estimate) or that reports any
-  thinking tokens stops everything, after the response has been cached so it is never re-requested.
+* tripwire: a single call that costs more than ``tripwire_usd`` (2x the ~$0.002 estimate), or that uses more than
+  ``max_thinking_tokens`` thinking tokens, stops everything, after the response has been cached so it is never
+  re-requested. The model cannot disable thinking and at its lowest level occasionally thinks briefly (219 tokens
+  cost about Rs 0.07), so the thinking limit is a ceiling for runaway thinking rather than a ban.
 """
 from __future__ import annotations
 
@@ -33,7 +35,7 @@ class Budget:
     max_inr: float | None = 600.0
     inr_per_usd: float = INR_PER_USD
     tripwire_usd: float = 0.004  # 2x the ~$0.002 per-call estimate
-    allow_thinking_tokens: bool = False
+    max_thinking_tokens: int = 1000
 
     @property
     def max_usd(self) -> float | None:
@@ -58,4 +60,5 @@ def budget_from_env() -> Budget:
         max_inr=_env_float("AGENTRAG_BUDGET_MAX_INR", 600.0),
         inr_per_usd=_env_float("AGENTRAG_BUDGET_INR_PER_USD", INR_PER_USD) or INR_PER_USD,
         tripwire_usd=_env_float("AGENTRAG_BUDGET_TRIPWIRE_USD", 0.004) or 0.004,
+        max_thinking_tokens=int(_env_float("AGENTRAG_BUDGET_MAX_THINKING_TOKENS", 1000) or 1000),
     )

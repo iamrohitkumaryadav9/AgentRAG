@@ -207,11 +207,21 @@ def test_tripwire_on_an_expensive_call_halts_everything_but_the_response_is_cach
     assert len(transport.requests) == 1
 
 
-def test_tripwire_on_thinking_tokens(tmp_path):
-    budget = Budget(max_calls=100, max_inr=600.0)
-    client = _client(tmp_path, FakeTransport(RawResponse(GOOD, prompt_tokens=100, thought_tokens=1)), budget=budget)
-    with pytest.raises(TripwireError, match="thinking"):
-        _gen(client)
+def test_brief_thinking_is_tolerated_but_runaway_thinking_trips_the_wire(tmp_path):
+    budget = Budget(max_calls=100, max_inr=600.0, max_thinking_tokens=1000)
+    real_call = RawResponse(GOOD, prompt_tokens=2000, output_tokens=80, thought_tokens=219)
+    brief = _client(tmp_path, FakeTransport(real_call), budget=budget)
+    assert _gen(brief, "brief thinking").parsed.verdict is Verdict.SUPPORT  # the 219-token call from the real run
+
+    at_limit = _client(tmp_path, FakeTransport(RawResponse(GOOD, prompt_tokens=100, thought_tokens=1000)),
+                       budget=budget)
+    assert _gen(at_limit, "exactly at the limit").parsed is not None
+
+    runaway = _client(tmp_path, FakeTransport(RawResponse(GOOD, prompt_tokens=100, thought_tokens=1001)),
+                      budget=budget)
+    with pytest.raises(TripwireError, match="1001 thinking tokens"):
+        _gen(runaway, "runaway thinking")
+    assert "1000 limit" in runaway.halt_reason
 
 
 def test_normal_calls_pass_the_tripwire(tmp_path):
