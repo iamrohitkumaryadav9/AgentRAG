@@ -79,14 +79,21 @@
    "B1 - B0: macro-F1 (keep policy)",
    "B1 - B0: contradiction recall (keep policy)"
   ],
-  "secondary_isolating_components": [
-   "N - B3 (the NEI recheck alone)",
+  "secondary_pre_registered": [
+   "N - B0 (the NEI recheck alone vs no critic; added by amendment before the dev run)",
+   "N - B3 (the NEI recheck alone vs citation rules)",
    "B1p - B0 and B2p - B0 (polarity checks alone)",
    "B1 - B1p and B2 - B2p (the recheck added to each polarity check)",
    "B1 - B2 (LLM vs NLI critic)"
   ],
-  "method": "paired bootstrap over claims, 5000 resamples, 95% percentile intervals; the abstain policy is reported alongside. Secondary comparisons are exploratory and uncorrected.",
-  "no_changes_after_freeze": "no prompt, rule, threshold or policy changes once the dev run starts; the dev run executes once"
+  "metrics": [
+   "macro-F1",
+   "contradiction recall"
+  ],
+  "correction": "Holm across ALL declared tests (primary and secondary, both metrics, keep policy): 8 comparisons x 2 metrics = 16 tests, one family",
+  "method": "paired bootstrap over claims, 10,000 resamples, 95% percentile intervals; two-sided bootstrap p-values; the abstain policy is reported alongside but is not part of the corrected family",
+  "exploratory": "everything else, including B3 - B0, B2 - B0, oracle - B0, per-class breakdowns and any analysis done after seeing the dev results, is labelled exploratory",
+  "no_changes_after_freeze": "no prompt, rule, threshold, arm or policy changes based on dev results; the dev run executes once"
  },
  "train_evidence": {
   "v1-low": {
@@ -119,5 +126,12 @@
   "A",
   "oracle"
  ],
- "dev_run_command": "python scripts/run_verification.py --stage run --split dev --label frozen --judge-version judge-v1 --relation-version relation-v1 --thinking low --k 5 --max-attempts 2 --arms B0,B3,N,B1p,B2p,B1,B2,A,oracle --workers 6 --rpm 60 --validation-gold 188 --validation-shuffled 60 --phase dev --phase-cap-inr 250"
+ "dev_run_command": "python scripts/run_verification.py --stage run --split dev --label frozen --judge-version judge-v1 --relation-version relation-v1 --thinking low --k 5 --max-attempts 2 --arms B0,B3,N,B1p,B2p,B1,B2,A,oracle --workers 6 --rpm 60 --validation-gold 188 --validation-shuffled 60 --phase dev --phase-cap-inr 250",
+ "amendments": [
+  {
+   "at": "2026-10-24T04:23:43+00:00",
+   "change": "Added N - B0 (macro-F1 and contradiction recall) as a pre-registered secondary comparison, kept B1 - B0 as primary, and applied Holm correction across all 16 declared tests (8 comparisons x 2 metrics, keep policy); bootstrap resamples raised from 5000 to 10000. Configuration unchanged.",
+   "configuration_fingerprint_unchanged": "231a36b8df199e24"
+  }
+ ]
 }
