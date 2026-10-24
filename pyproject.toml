@@ -5,10 +5,9 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "agentrag"
 version = "0.2.0"
-description = "A self-correcting multi-agent RAG assistant with guardrails, evaluation, and observability"
+description = "Multi-agent RAG with hybrid retrieval, guardrails, OpenTelemetry, and a pre-registered LLM evaluation"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { file = "LICENSE" }
 authors = [{ name = "Rohit Kumar" }]
 dependencies = [
     "langgraph>=1.2,<2.0",

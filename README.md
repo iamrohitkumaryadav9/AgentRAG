@@ -1,26 +1,34 @@
-# AgentRAG — A Self-Correcting Multi-Agent RAG Assistant
+# AgentRAG — Multi-Agent RAG with a Pre-Registered LLM Evaluation
 
-AgentRAG is a small retrieval-augmented generation (RAG) service built around
-a **multi-agent workflow**, not a single prompt. A router agent decides
-whether a query needs retrieval, a retriever agent searches a vector store
-and gates on whether the corpus actually covers the question, a synthesizer
-agent drafts a **structured, schema-validated** answer, and a critic agent
-checks it for groundedness and fabricated citations — looping back with
-feedback if the check fails.
+*An individual project by [Rohit Kumar](https://github.com/iamrohitkumaryadav9).*
 
-It ships with the things that separate a RAG demo from a RAG system:
-a **retrieval benchmark** on the public BEIR SciFact set (seven strategies,
-confidence intervals, error analysis), a small **regression harness** that
-runs in CI against a 3-document toy corpus, and **OpenTelemetry
-instrumentation** that makes per-agent latency and cost visible. The toy
-harness is a smoke test of pipeline behaviour, not a quality claim; the
-retrieval benchmark is where the quality evidence lives.
+AgentRAG is a retrieval-augmented generation (RAG) service built around a **multi-agent LangGraph workflow**:
+a router decides whether a query needs retrieval, a retriever searches a hybrid BM25 + dense index and refuses
+when the corpus doesn't cover the question, a synthesizer drafts a **schema-validated** answer with citations,
+and a critic checks it and can send it back for a bounded retry.
 
-Everything runs **fully offline out of the box** (BM25 retrieval + a
-deterministic extractive generator), so you can clone it and try it in
-seconds with no API keys — while every component is pluggable into a real
-stack: hybrid BM25 + dense retrieval (sentence-transformers + FAISS), a real
-LLM (Google Gemini), and a FastAPI service.
+The project's focus is **measuring whether each piece actually helps**, on public benchmarks with human labels.
+
+## Key results
+
+| Question | Finding |
+| --- | --- |
+| Does hybrid retrieval beat BM25? | **Yes.** On BEIR SciFact (5,183 docs, 300 queries), BM25 + bge-small fusion raised nDCG@10 from **0.670 to 0.711** (+0.041, 95% CI [+0.018, +0.064], Holm-corrected) and Recall@100 from 0.886 to **0.965**. It is now the app's default retriever. |
+| Does a cross-encoder reranker help? | **No.** It plateaus near 0.69 nDCG@10 whatever the first stage, and costs ~6 s/query on CPU. |
+| How well does a Gemini judge agree with experts? | Macro-F1 **0.781**, Cohen's **κ 0.668** against SciFact's human SUPPORT / CONTRADICT / NOT_ENOUGH_INFO labels (300 claims). |
+| Does an LLM self-critique loop improve the judge? | **No.** Pre-registered primary comparison: −0.004 macro-F1 [−0.029, +0.022]. The dominant error is false "not enough info" (47 of 188 evidence-bearing claims), which a polarity critic cannot see. |
+| Is retrieval the bottleneck? | **No.** Giving the judge the gold abstracts changed macro-F1 by only +0.010; the right document is in the top 5 for 93% of claims. |
+
+Settings were tuned on train claims, **frozen and pushed before the test claims were run**, and run once. The full
+study cost about Rs 146 in Gemini API calls, under hard budget caps enforced in code. Details:
+[retrieval ablation](docs/scifact_ablation.md) · [error analysis](docs/scifact_error_analysis.md) ·
+[claim verification](docs/claim_verification.md).
+
+Everything also runs **fully offline** (BM25 retrieval + a deterministic extractive generator), so you can clone it
+and try it with no API keys. CI runs ruff, the offline test suite and a toy-corpus smoke test on every push, and
+every agent step is traced with **OpenTelemetry**.
+
+## Architecture
 
 ```
             ┌────────┐
@@ -390,6 +398,9 @@ data/sample_docs/   built-in knowledge base used by the demo, tests, and eval
 - Track eval metrics over time to detect quality drift, rather than only
   gating per-commit.
 
-## License
+## Author
 
-MIT — see [LICENSE](LICENSE).
+Individual project by **Rohit Kumar**, M.Tech CSE, IIIT Delhi
+([GitHub](https://github.com/iamrohitkumaryadav9) · [LinkedIn](https://www.linkedin.com/in/rohit-k-327030387)).
+
+© 2026 Rohit Kumar. All rights reserved.

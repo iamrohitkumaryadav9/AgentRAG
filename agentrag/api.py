@@ -23,7 +23,11 @@ from .vectorstore import VectorStore, get_vector_store
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="AgentRAG", version=__version__, description="A small, self-correcting multi-agent RAG assistant.")
+app = FastAPI(
+    title="AgentRAG",
+    version=__version__,
+    description="Multi-agent RAG with hybrid retrieval and a critic-driven retry loop.",
+)
 
 _state = {"vector_store": None, "llm": None, "num_chunks": 0}
 

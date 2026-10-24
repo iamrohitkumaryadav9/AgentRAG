@@ -1,4 +1,4 @@
-"""AgentRAG: a small, self-correcting multi-agent RAG assistant.
+"""AgentRAG: a multi-agent RAG assistant with a critic-driven retry loop.
 
 Modules:
     config       - runtime configuration via environment variables
