@@ -20,6 +20,7 @@ from typing import Protocol
 from .common import RelationResult, Usage
 from .data import Doc
 from .gemini import GeminiClient, InvalidModelOutput
+from .nei_rule import NeiRecheck, SentenceHit
 from .prompts import RELATION_VERSION, render_relation
 from .schemas import EXPECTED_RELATION, JudgeOutput, Relation, RelationOutput, Verdict
 
@@ -59,6 +60,7 @@ class CriticReport:
     relation: Relation | None = None
     expected: Relation | None = None
     polarity_ok: bool | None = None  # None when no polarity check ran
+    nei_hit: SentenceHit | None = None  # a retrieved sentence that contradicts the NOT_ENOUGH_INFO verdict
     checker_status: str = "n/a"  # "ok" | "blocked" | "invalid" | "n/a"
     feedback: str | None = None
     usage: Usage = field(default_factory=Usage)
@@ -95,8 +97,9 @@ def resolve_citations(output: JudgeOutput, docs: Sequence[Doc]) -> tuple[list[tu
 
 
 class Critic:
-    def __init__(self, checker: PolarityChecker | None = None) -> None:
+    def __init__(self, checker: PolarityChecker | None = None, nei_rule: NeiRecheck | None = None) -> None:
         self.checker = checker
+        self.nei_rule = nei_rule
 
     def check(self, claim: str, docs: Sequence[Doc], output: JudgeOutput) -> CriticReport:
         by_id = {d.id: d for d in docs}
@@ -110,7 +113,9 @@ class Critic:
         if failures:
             report.feedback = "; ".join(failures)
             return report
-        if self.checker is None or output.verdict is Verdict.NOT_ENOUGH_INFO:
+        if output.verdict is Verdict.NOT_ENOUGH_INFO:
+            return self._recheck_nei(claim, docs, report)
+        if self.checker is None:
             return report
 
         result = self.checker.relation(claim, sentences)
@@ -124,4 +129,16 @@ class Critic:
                 f"your verdict was {output.verdict.value}, but read on their own the sentences you cited "
                 f"{_PHRASE[result.relation]} the claim"
             )
+        return report
+
+    def _recheck_nei(self, claim: str, docs: Sequence[Doc], report: CriticReport) -> CriticReport:
+        """Flag a NOT_ENOUGH_INFO verdict when a retrieved sentence entails or contradicts the claim."""
+        hit = self.nei_rule.find(claim, docs) if self.nei_rule is not None else None
+        if hit is None:
+            return report
+        report.passed, report.nei_hit = False, hit
+        report.feedback = (
+            f'you answered NOT_ENOUGH_INFO, but sentence {hit.index} of document {hit.doc_id} ("{hit.text}") '
+            f"may {_PHRASE[hit.relation]} the claim; re-read it and decide whether it settles the claim"
+        )
         return report

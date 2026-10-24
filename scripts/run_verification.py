@@ -8,9 +8,12 @@ Stages
 
 Arms
   B0  Gemini judge, no critic
-  B1  judge + rules + blind LLM polarity check          (the main method)
-  B2  judge + rules + blind NLI polarity check          (non-LLM critic)
-  B3  judge + rules only                                (ablation: what the polarity check adds)
+  B3  judge + citation rules only
+  N   judge + rules + NEI recheck                       (the NEI recheck alone)
+  B1p judge + rules + blind LLM polarity check          (polarity check alone)
+  B2p judge + rules + blind NLI polarity check          (non-LLM polarity check alone)
+  B1  judge + rules + LLM polarity check + NEI recheck  (the main method)
+  B2  judge + rules + NLI polarity check + NEI recheck  (the non-LLM critic)
   A   NLI model alone, no LLM                           (reference)
   oracle  judge given the gold abstracts, no critic     (separates retrieval from judging errors)
 
@@ -49,11 +52,13 @@ from agentrag.verify.budget import Budget, BudgetExceeded, TripwireError, budget
 from agentrag.verify.cache import ResponseCache, find_secrets
 from agentrag.verify.critic import Critic, LlmPolarityChecker
 from agentrag.verify.experiment import (
+    NEI_TAU_GRID,
     claim_record,
     docs_for,
     evaluate_arm,
     nli_only_verdict,
     oracle_docs,
+    simulate_nei_tau,
     tune_nli_only_tau,
     tune_tau,
     validation_items,
@@ -62,6 +67,7 @@ from agentrag.verify.gemini import THINKING_LEVELS, GeminiClient, GenaiTransport
 from agentrag.verify.graph import build_verify_graph, verify_claim
 from agentrag.verify.judge import Judge
 from agentrag.verify.metrics import checker_validation, contradiction_recall, macro_f1
+from agentrag.verify.nei_rule import NeiRecheck
 from agentrag.verify.nli import NLI_MODEL, NliPolarityChecker, NliScorer
 from agentrag.verify.prompts import JUDGE_VERSION, RELATION_VERSION, config_fingerprint
 from agentrag.verify.ratelimit import (
@@ -74,6 +80,7 @@ from agentrag.verify.ratelimit import (
 CACHE_PATH = RESULTS / "verify_cache.jsonl"
 NLI_TUNING = RESULTS / "verify_nli_tuning.json"
 NLI_ONLY_TUNING = RESULTS / "verify_nli_only_tuning.json"
+NEI_TUNING = RESULTS / "verify_nei_tuning.json"
 FREEZE_PATH = RESULTS / "verify_freeze.json"
 MODEL = settings.gemini_model
 STOPPING = (DailyBudgetExhausted, BudgetExceeded, TripwireError, Halted)
@@ -86,6 +93,13 @@ def load_json(path: Path):
 def nli_taus() -> tuple[float, float]:
     tuned = load_json(NLI_TUNING)
     return tuned["tau_entail"], tuned["tau_contradict"]
+
+
+def nei_tau_value(args) -> float | None:
+    """The NEI-recheck threshold: --nei-tau if given, else the value tuned on train (verify_nei_tuning.json)."""
+    if args.nei_tau is not None:
+        return args.nei_tau
+    return load_json(NEI_TUNING)["tau"] if NEI_TUNING.exists() else None
 
 
 def retrieve(sf: sf_data.SciFact, claims, k: int) -> dict[str, list[str]]:
@@ -118,6 +132,29 @@ def tune_nli_stage(sf: sf_data.SciFact) -> None:
     print("per-class recall:", {k: round(v['recall'], 3) for k, v in tuned["per_class_recall"].items()})
 
 
+def tune_nei_stage(args) -> int:
+    """Choose the NEI-recheck threshold from retries run at the lowest threshold (no API calls).
+
+    Reads arm N of a train run made with a permissive --nei-tau, evaluates every stricter threshold on the stored
+    retry outcomes, and picks the best net (fixes - harms) subject to harms <= fixes. Train claims only.
+    """
+    source = RESULTS / f"verify_train_{args.label}.json"
+    run = load_json(source)
+    if "N" not in run["arms"]:
+        sys.exit(f"{source} has no arm N (rules + NEI recheck); run it first with --arms ...,N --nei-tau 0.5")
+    low = run["config"]["nei_recheck_tau"]
+    grid = [t for t in NEI_TAU_GRID if t >= low]
+    result = simulate_nei_tau(run["arms"]["N"]["claims"], grid)
+    result.update({"source": source.name, "lowest_threshold_run": low, "split": "train"})
+    NEI_TUNING.write_text(json.dumps(result, indent=1), encoding="utf-8")
+    print(f"NEI-recheck threshold: {result['tau']}  ({result['nei_verdicts']} NOT_ENOUGH_INFO verdicts, "
+          f"{result['false_nei']} wrong / {result['correct_nei']} right)")
+    for tau, row in result["table"].items():
+        print(f"  tau {tau}: flagged {row['flagged']:>2}  fixed {row['fixed']:>2}  "
+              f"harmed {row['harmed']:>2}  net {row['net']:+d}")
+    return 0
+
+
 def build_client(args, offline: bool) -> tuple[GeminiClient, ResponseCache, Budget]:
     cache = ResponseCache(CACHE_PATH, offline=offline)
     key = settings.google_api_key or ""
@@ -139,6 +176,10 @@ def current_config(args) -> dict:
         "relation_version": args.relation_version, "nli_model": NLI_MODEL,
         "nli_taus": nli_taus() if NLI_TUNING.exists() else None,
         "nli_only_tau": load_json(NLI_ONLY_TUNING)["tau"] if NLI_ONLY_TUNING.exists() else None,
+        "nei_recheck_tau": nei_tau_value(args),
+        "nei_recheck": "NLI over every retrieved sentence; flag a NOT_ENOUGH_INFO verdict if entail or contradict "
+                       "probability > tau and retry once with feedback naming the sentence",
+        "max_thinking_tokens_per_call": budget_from_env().max_thinking_tokens,
         "failure_policy_reported": ["keep", "abstain"], "primary_failure_policy": "keep",
         "retrieval": "hybrid-bge (BM25 + bge-small-en-v1.5, RRF k=60, depth 100)",
     }
@@ -187,7 +228,11 @@ def run_parallel(label: str, items: Sequence, fn: Callable, workers: int, client
 def compare(claims, outcomes_by_arm) -> dict:
     gold = [c.label for c in claims]
     out: dict = {}
-    for a, b in (("B1", "B0"), ("B2", "B0"), ("B3", "B0"), ("B1", "B2")):
+    # Pairs chosen so each component's effect is isolated: N vs B3 is the NEI recheck alone; B1 vs B1p and
+    # B2 vs B2p are the recheck added to each polarity critic; the *p arms vs B0 are the polarity checks alone.
+    pairs = (("B3", "B0"), ("N", "B3"), ("B1p", "B0"), ("B2p", "B0"), ("B1", "B1p"), ("B2", "B2p"),
+             ("B1", "B0"), ("B2", "B0"), ("B1", "B2"))
+    for a, b in pairs:
         if a not in outcomes_by_arm or b not in outcomes_by_arm:
             continue
         for policy, getter in (("keep", lambda o: o.final_keep.value), ("abstain", lambda o: o.final_abstain.value)):
@@ -266,8 +311,9 @@ def run_stage(args) -> int:
     client, cache, budget = build_client(args, args.offline)
     print("budget:", spend_line(client.limiter, budget))
     judge = Judge(client, args.judge_version)
-    scorer, nli_checker = None, None
-    if {"B2", "A"} & set(arms) or args.validation_gold or args.validation_shuffled:
+    needs_nli = bool({"A", "B2", "B2p", "N", "B1"} & set(arms)) or args.validation_gold or args.validation_shuffled
+    scorer, nli_checker, nei_rule = None, None, None
+    if needs_nli:
         if not NLI_TUNING.exists():
             sys.exit("run --stage tune-nli first")
         scorer = NliScorer()
@@ -278,22 +324,37 @@ def run_stage(args) -> int:
             with nli_lock:
                 return scorer.score(premise, hypothesis)
 
+        def locked_score_many(pairs):
+            with nli_lock:
+                return scorer.score_many(pairs)
+
         nli_checker = NliPolarityChecker(locked_score, tau_e, tau_c)
+        nei_tau = nei_tau_value(args)
+        if {"N", "B1", "B2"} & set(arms):
+            if nei_tau is None:
+                sys.exit("the NEI recheck needs a threshold: pass --nei-tau (0.5 to explore) or run --stage tune-nei")
+            nei_rule = NeiRecheck(locked_score_many, nei_tau)
 
     llm_checker = LlmPolarityChecker(client, args.relation_version)
-    graphs = {
-        "B0": build_verify_graph(judge, None, args.max_attempts),
-        "B3": build_verify_graph(judge, Critic(None), args.max_attempts),
-        "B1": build_verify_graph(judge, Critic(llm_checker), args.max_attempts),
+    # Critics per arm. B1/B2 = polarity check + NEI recheck; B1p/B2p = polarity check only; N = NEI recheck only
+    # (no polarity check); B3 = citation rules only; B0 = no critic.
+    critics = {
+        "B0": None,
+        "B3": Critic(None),
+        "B1p": Critic(llm_checker),
+        "N": Critic(None, nei_rule),
+        "B1": Critic(llm_checker, nei_rule),
     }
     if nli_checker is not None:
-        graphs["B2"] = build_verify_graph(judge, Critic(nli_checker), args.max_attempts)
+        critics["B2p"] = Critic(nli_checker)
+        critics["B2"] = Critic(nli_checker, nei_rule)
+    graphs = {name: build_verify_graph(judge, critic, args.max_attempts) for name, critic in critics.items()}
 
     results: dict = {"config": config, "retrieval": ceiling, "claims": [c.id for c in claims], "arms": {}}
     outcomes_by_arm: dict = {}
     started = time.time()
     try:
-        for arm in [a for a in ("B0", "B3", "B1", "B2") if a in arms]:
+        for arm in [a for a in ("B0", "B3", "N", "B1p", "B2p", "B1", "B2") if a in arms]:
             outcomes = run_parallel(
                 arm, claims, lambda claim, arm=arm: verify_claim(graphs[arm], claim.text, docs[claim.id]),
                 args.workers, client,
@@ -304,11 +365,12 @@ def run_stage(args) -> int:
                 "claims": [claim_record(c, o, retrieved[c.id]) for c, o in zip(claims, outcomes, strict=True)],
             }
             m = results["arms"][arm]["metrics"]
-            retry = m["retry_keep"]
+            retry, on_nei = m["retry_keep"], m["retry_nei_subset"] or {}
             print(f"{arm}: macro-F1 {m['final_keep']['macro_f1']:.3f} (initial {m['initial']['macro_f1']:.3f}) "
                   f"contradiction recall {m['final_keep']['per_class']['CONTRADICT']['recall']:.3f} "
                   f"flagged {retry['flagged']} fixed {retry['fixed']} harmed {retry['harmed']} "
-                  f"| api calls total {m['usage']['api_calls_total']}", flush=True)
+                  f"| on NEI verdicts: flagged {on_nei.get('flagged', 0)} fixed {on_nei.get('fixed', 0)} "
+                  f"harmed {on_nei.get('harmed', 0)} | api calls total {m['usage']['api_calls_total']}", flush=True)
 
         if "oracle" in arms:
             oracle_graph = build_verify_graph(judge, None, args.max_attempts)
@@ -394,7 +456,8 @@ def freeze_stage(args) -> int:
             f"python scripts/run_verification.py --stage run --split dev --label frozen "
             f"--judge-version {args.judge_version} --relation-version {args.relation_version} "
             f"--thinking {args.thinking} --k {args.k} --max-attempts {args.max_attempts} "
-            f"--arms B0,B3,B1,B2,A,oracle --workers {args.workers} --validation-gold 188 --validation-shuffled 60"
+            f"--arms B0,B3,N,B1p,B2p,B1,B2,A,oracle --workers {args.workers} "
+            "--validation-gold 188 --validation-shuffled 60"
         ),
     }
     FREEZE_PATH.write_text(json.dumps(freeze, indent=1), encoding="utf-8")
@@ -404,7 +467,7 @@ def freeze_stage(args) -> int:
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--stage", choices=("tune-nli", "run", "freeze"), default="run")
+    p.add_argument("--stage", choices=("tune-nli", "tune-nei", "run", "freeze"), default="run")
     p.add_argument("--split", choices=("train", "dev"), default="train")
     p.add_argument("--arms", default="B0,B1,B2,B3")
     p.add_argument("--label", default="run")
@@ -412,6 +475,7 @@ def main() -> int:
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--k", type=int, default=5)
     p.add_argument("--max-attempts", type=int, default=2)
+    p.add_argument("--nei-tau", type=float, default=None, help="NEI-recheck threshold (default: tuned value)")
     p.add_argument("--judge-version", default=JUDGE_VERSION)
     p.add_argument("--relation-version", default=RELATION_VERSION)
     p.add_argument("--thinking", choices=THINKING_LEVELS, default="low")
@@ -429,6 +493,8 @@ def main() -> int:
     if args.stage == "tune-nli":
         tune_nli_stage(sf)
         return 0
+    if args.stage == "tune-nei":
+        return tune_nei_stage(args)
     if args.stage == "freeze":
         return freeze_stage(args)
     return run_stage(args)
