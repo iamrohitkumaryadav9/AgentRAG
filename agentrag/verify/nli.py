@@ -17,12 +17,18 @@ EXPECTED_LABELS = {"entailment", "neutral", "contradiction"}
 Probs = Mapping[str, float]  # keys: entailment / neutral / contradiction
 
 
-def decide_relation(probs: Probs, tau: float) -> Relation:
-    """Entails / contradicts only when that class wins *and* clears ``tau``; otherwise neutral."""
+def decide_relation(probs: Probs, tau_entail: float, tau_contradict: float | None = None) -> Relation:
+    """Confidence-threshold rule: the stronger of entailment / contradiction wins if it clears its own threshold.
+
+    The model's own "neutral" class is deliberately *not* required to lose. NLI models trained on MNLI-style
+    data lean toward neutral on scientific text, so an argmax rule misses most entailments; separate thresholds,
+    tuned on labelled training data, let the critic trade recall for precision per direction.
+    """
+    tau_contradict = tau_entail if tau_contradict is None else tau_contradict
     entail, contra = probs["entailment"], probs["contradiction"]
-    if entail >= contra and entail >= probs["neutral"] and entail >= tau:
+    if entail >= tau_entail and entail >= contra:
         return Relation.ENTAILS
-    if contra > entail and contra >= probs["neutral"] and contra >= tau:
+    if contra >= tau_contradict and contra > entail:
         return Relation.CONTRADICTS
     return Relation.NEUTRAL
 
@@ -36,7 +42,9 @@ class NliScorer:
 
         self._torch = torch
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForSequenceClassification.from_pretrained(model_name).eval()
+        # The checkpoint stores float16 weights; on CPU, half-precision matmuls are an order of magnitude
+        # slower than float32, so load in float32 explicitly.
+        self.model = AutoModelForSequenceClassification.from_pretrained(model_name, dtype=torch.float32).eval()
         labels = {int(i): str(name).lower() for i, name in self.model.config.id2label.items()}
         if set(labels.values()) != EXPECTED_LABELS:
             raise RuntimeError(f"unexpected NLI labels {labels}; refusing to guess their order")
@@ -62,9 +70,13 @@ class NliScorer:
 class NliPolarityChecker:
     """Blind polarity check without an LLM: does the cited text entail / contradict the claim?"""
 
-    def __init__(self, scorer: Callable[[str, str], Probs], tau: float, name: str = "nli") -> None:
-        self.scorer, self.tau, self.name = scorer, tau, name
+    def __init__(
+        self, scorer: Callable[[str, str], Probs], tau_entail: float, tau_contradict: float | None = None,
+        name: str = "nli",
+    ) -> None:
+        self.scorer, self.tau_entail, self.tau_contradict, self.name = scorer, tau_entail, tau_contradict, name
 
     def relation(self, claim: str, sentences: Sequence[str]) -> RelationResult:
         probs = self.scorer(" ".join(sentences), claim)
-        return RelationResult(decide_relation(probs, self.tau), Usage(model_calls=1), dict(probs))
+        relation = decide_relation(probs, self.tau_entail, self.tau_contradict)
+        return RelationResult(relation, Usage(model_calls=1), dict(probs))

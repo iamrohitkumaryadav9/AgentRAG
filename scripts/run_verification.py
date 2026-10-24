@@ -70,6 +70,11 @@ def load_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def nli_taus() -> tuple[float, float]:
+    tuned = load_json(NLI_TUNING)
+    return tuned["tau_entail"], tuned["tau_contradict"]
+
+
 def retrieve(sf: sf_data.SciFact, claims, k: int) -> dict[str, list[str]]:
     """Top-k document ids per claim from the app's default hybrid (BM25 + bge-small, RRF)."""
     beir = beir_data.load("scifact", CACHE)
@@ -95,8 +100,9 @@ def tune_nli_stage(sf: sf_data.SciFact) -> None:
         "items": "gold rationale (entails/contradicts) + shuffled-claim negatives",
     })
     NLI_TUNING.write_text(json.dumps(tuned, indent=1), encoding="utf-8")
-    print(f"tau = {tuned['tau']}  macro-F1 on {tuned['n']} train items = {tuned['macro_f1']:.3f}")
-    print("grid:", {k: round(v, 3) for k, v in tuned["grid"].items()})
+    print(f"tau_entail = {tuned['tau_entail']}  tau_contradict = {tuned['tau_contradict']}  "
+          f"macro-F1 on {tuned['n']} train items = {tuned['macro_f1']:.3f}")
+    print("per-class recall:", {k: round(v['recall'], 3) for k, v in tuned["per_class_recall"].items()})
 
 
 def build_client(args, offline: bool) -> tuple[GeminiClient, ResponseCache]:
@@ -115,7 +121,7 @@ def current_config(args) -> dict:
         "model": MODEL, "thinking": args.thinking, "temperature": 0.0, "k": args.k,
         "max_attempts": args.max_attempts, "judge_version": args.judge_version,
         "relation_version": args.relation_version, "nli_model": NLI_MODEL,
-        "nli_tau": load_json(NLI_TUNING)["tau"] if NLI_TUNING.exists() else None,
+        "nli_taus": nli_taus() if NLI_TUNING.exists() else None,
         "failure_policy_reported": ["keep", "abstain"], "primary_failure_policy": "keep",
         "retrieval": "hybrid-bge (BM25 + bge-small-en-v1.5, RRF k=60, depth 100)",
     }
@@ -145,19 +151,27 @@ def compare(claims, outcomes_by_arm) -> dict:
 
 def validate_checkers(args, sf, claims, client, nli_checker) -> dict:
     items = validation_items(sf, claims, seed=0)
-    gold = [i for i in items if i["kind"] == "gold"][: args.validation_gold]
-    shuffled = [i for i in items if i["kind"] == "shuffled"][: args.validation_shuffled]
-    chosen = gold + shuffled
-    result: dict = {"items": {"gold": len(gold), "shuffled": len(shuffled)}}
+    all_gold = [i for i in items if i["kind"] == "gold"]
+    all_shuffled = [i for i in items if i["kind"] == "shuffled"]
+    # The LLM checker costs API calls, so it sees only the requested number of items; the local NLI model sees all.
+    subsets = {
+        "llm": (all_gold[: args.validation_gold], all_shuffled[: args.validation_shuffled]),
+        "nli": (all_gold, all_shuffled),
+    }
     checkers = {}
-    if chosen:
+    if args.validation_gold or args.validation_shuffled:
         checkers["llm"] = LlmPolarityChecker(client, args.relation_version)
     if nli_checker is not None:
         checkers["nli"] = nli_checker
+
+    result: dict = {}
     for name, checker in checkers.items():
+        gold, shuffled = subsets[name]
+        chosen = gold + shuffled
         predicted = [checker.relation(i["claim"], i["sentences"]).relation.value for i in chosen]
         gold_pred, shuffled_pred = predicted[: len(gold)], predicted[len(gold):]
         result[name] = {
+            "items": {"gold": len(gold), "shuffled": len(shuffled)},
             "gold": checker_validation([i["expected"] for i in gold], gold_pred) if gold else None,
             "shuffled": checker_validation([i["expected"] for i in shuffled], shuffled_pred) if shuffled else None,
         }
@@ -190,13 +204,13 @@ def run_stage(args) -> int:
 
     client, cache = build_client(args, args.offline)
     judge = Judge(client, args.judge_version)
-    scorer, nli_checker, tau = None, None, None
+    scorer, nli_checker = None, None
     if {"B2", "A"} & set(arms) or args.validation_gold or args.validation_shuffled:
         if not NLI_TUNING.exists():
             sys.exit("run --stage tune-nli first")
         scorer = NliScorer()
-        tau = load_json(NLI_TUNING)["tau"]
-        nli_checker = NliPolarityChecker(scorer.score, tau)
+        tau_e, tau_c = nli_taus()
+        nli_checker = NliPolarityChecker(scorer.score, tau_e, tau_c)
 
     llm_checker = LlmPolarityChecker(client, args.relation_version)
     graphs = {

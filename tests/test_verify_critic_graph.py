@@ -1,4 +1,4 @@
-import pytest
+﻿import pytest
 
 from agentrag.verify.common import RelationResult, Usage
 from agentrag.verify.critic import Critic, resolve_citations
@@ -185,7 +185,8 @@ def test_usage_adds_up_across_judge_and_critic_calls_and_attempts():
         ({"entailment": 0.9, "neutral": 0.05, "contradiction": 0.05}, 0.8, Relation.ENTAILS),
         ({"entailment": 0.7, "neutral": 0.2, "contradiction": 0.1}, 0.8, Relation.NEUTRAL),  # below tau
         ({"entailment": 0.05, "neutral": 0.05, "contradiction": 0.9}, 0.8, Relation.CONTRADICTS),
-        ({"entailment": 0.2, "neutral": 0.7, "contradiction": 0.1}, 0.3, Relation.NEUTRAL),  # neutral wins
+        ({"entailment": 0.2, "neutral": 0.7, "contradiction": 0.1}, 0.3, Relation.NEUTRAL),  # below tau
+        ({"entailment": 0.4, "neutral": 0.5, "contradiction": 0.1}, 0.3, Relation.ENTAILS),  # neutral need not lose
         ({"entailment": 0.4, "neutral": 0.2, "contradiction": 0.4}, 0.3, Relation.ENTAILS),  # tie goes to entailment
     ],
 )
@@ -200,7 +201,7 @@ def test_nli_checker_concatenates_the_cited_sentences_as_premise_and_uses_the_cl
         seen.append((premise, hypothesis))
         return {"entailment": 0.1, "neutral": 0.1, "contradiction": 0.8}
 
-    result = NliPolarityChecker(scorer, tau=0.5).relation(CLAIM, ["First.", "Second."])
+    result = NliPolarityChecker(scorer, tau_entail=0.5).relation(CLAIM, ["First.", "Second."])
     assert result.relation is Relation.CONTRADICTS and seen == [("First. Second.", CLAIM)]
     assert result.usage.model_calls == 1 and result.usage.api_calls == 0
 
@@ -222,3 +223,10 @@ def test_relation_prompt_contains_no_verdict_or_rationale_slot():
 def test_config_fingerprint_is_stable_and_sensitive_to_settings():
     assert config_fingerprint(k=5, thinking="low") == config_fingerprint(k=5, thinking="low")
     assert config_fingerprint(k=5, thinking="low") != config_fingerprint(k=5, thinking="medium")
+
+
+def test_the_two_directions_have_independent_thresholds():
+    probs = {"entailment": 0.35, "neutral": 0.3, "contradiction": 0.35 - 0.001}
+    assert decide_relation(probs, 0.3, 0.9) is Relation.ENTAILS
+    assert decide_relation({"entailment": 0.1, "neutral": 0.5, "contradiction": 0.4}, 0.9, 0.3) is Relation.CONTRADICTS
+    assert decide_relation({"entailment": 0.1, "neutral": 0.5, "contradiction": 0.4}, 0.3, 0.9) is Relation.NEUTRAL

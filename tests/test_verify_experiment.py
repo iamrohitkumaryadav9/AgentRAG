@@ -4,6 +4,7 @@ from agentrag.verify.common import RelationResult, Usage
 from agentrag.verify.critic import Critic
 from agentrag.verify.data import Claim, Doc, SciFact
 from agentrag.verify.experiment import (
+    TAU_GRID,
     claim_record,
     evaluate_arm,
     gold_pairs,
@@ -132,15 +133,17 @@ def test_tau_tuning_picks_the_threshold_that_separates_the_classes_and_prefers_h
     unsure = {"entailment": 0.62, "neutral": 0.30, "contradiction": 0.08}
     samples = [(confident, Relation.ENTAILS)] * 5 + [(unsure, Relation.NEUTRAL)] * 5
     best = tune_tau(samples)
-    assert best["tau"] == 0.95 and best["macro_f1"] == 1.0  # 0.7, 0.8, 0.9 also reach 1.0; the strictest wins
-    assert best["n"] == 10 and set(best["grid"]) >= {"0.5", "0.98"}
+    # the entailment threshold can be anything in (0.62, 0.97]; the strictest wins, and the contradiction
+    # threshold, which no sample exercises, ties at the strictest value too
+    assert best["tau_entail"] == 0.95 and best["macro_f1"] > 0.6
+    assert best["n"] == 10 and "0.5,0.5" in best["grid"] and best["per_class_recall"]["entails"]["recall"] == 1.0
 
 
 def test_nli_only_tau_tuning_runs_on_sentence_level_samples():
     e = {"entailment": 0.9, "neutral": 0.05, "contradiction": 0.05}
     n = {"entailment": 0.1, "neutral": 0.8, "contradiction": 0.1}
     result = tune_nli_only_tau([([e, n], "SUPPORT"), ([n], "NOT_ENOUGH_INFO")])
-    assert result["macro_f1"] > 0 and result["tau"] in (0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.98)
+    assert result["macro_f1"] > 0 and result["tau"] in TAU_GRID
 
 
 def test_validation_items_pair_gold_rationales_with_the_claim_and_with_a_different_claim():

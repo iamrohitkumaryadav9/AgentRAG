@@ -17,7 +17,7 @@ from .metrics import evidence_prf, faithfulness, retry_stats, summarize
 from .nli import Probs, decide_relation
 from .schemas import Relation, Verdict
 
-TAU_GRID = (0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.98)
+TAU_GRID = (0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.98)
 GOLD_RELATION = {SUPPORT: Relation.ENTAILS, CONTRADICT: Relation.CONTRADICTS}
 
 
@@ -160,14 +160,28 @@ def _macro_f1_generic(truth: Sequence, pred: Sequence) -> float:
 
 
 def tune_tau(samples: Sequence[tuple[Probs, Relation]], grid: Sequence[float] = TAU_GRID) -> dict:
-    """Pick the NLI confidence threshold that maximises 3-way relation macro-F1 on labelled (probs, relation) pairs.
+    """Pick the (entailment, contradiction) thresholds that maximise 3-way relation macro-F1.
 
-    Ties resolve to the *higher* threshold: the more conservative critic, which flags fewer correct answers.
+    Searched jointly over ``grid`` x ``grid`` on labelled (probs, relation) pairs. Ties resolve to the *higher*
+    thresholds: the more conservative critic, which flags fewer correct answers.
     """
     truth = [relation for _, relation in samples]
-    table = {tau: _macro_f1_generic(truth, [decide_relation(p, tau) for p, _ in samples]) for tau in grid}
-    best = max(grid, key=lambda tau: (round(table[tau], 12), tau))
-    return {"tau": best, "macro_f1": table[best], "grid": {str(t): v for t, v in table.items()}, "n": len(samples)}
+    table = {
+        (te, tc): _macro_f1_generic(truth, [decide_relation(p, te, tc) for p, _ in samples])
+        for te in grid
+        for tc in grid
+    }
+    best = max(table, key=lambda pair: (round(table[pair], 12), pair))
+    per_class = {}
+    predicted = [decide_relation(p, *best) for p, _ in samples]
+    for relation in Relation:
+        n = sum(t is relation for t in truth)
+        hits = sum(t is relation and p is relation for t, p in zip(truth, predicted, strict=True))
+        per_class[relation.value] = {"n": n, "recall": hits / max(1, n)}
+    return {
+        "tau_entail": best[0], "tau_contradict": best[1], "macro_f1": table[best], "n": len(samples),
+        "per_class_recall": per_class, "grid": {f"{te},{tc}": v for (te, tc), v in table.items()},
+    }
 
 
 def tune_nli_only_tau(
