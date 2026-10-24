@@ -453,18 +453,50 @@ def freeze_stage(args) -> int:
                     "b0_macro_f1": arm["metrics"]["initial"]["macro_f1"],
                     "b0_contradiction_recall": arm["metrics"]["initial"]["per_class"]["CONTRADICT"]["recall"],
                 }
+    nei = load_json(NEI_TUNING) if NEI_TUNING.exists() else None
+    rule_kept = nei is not None and nei["tau"] is not None
+    dev_arm_order = ["B0", "B3", "N", "B1p", "B2p", "B1", "B2", "A", "oracle"] if rule_kept else [
+        "B0", "B3", "B1p", "B2p", "A", "oracle"]
+    arms = list(dev_arm_order)
+    train_final = RESULTS / f"verify_train_{args.train_final}.json"
+    budget = budget_from_env()
     freeze = {
         "fingerprint": fingerprint,
         "frozen_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "config": config,
-        "selection_rule": "higher B0 macro-F1 on the same 60 train claims; ties keep the earlier version",
+        "selection_rules": {
+            "judge_prompt": "judge-v1 frozen by decision: judge-v2's macro-F1 edge was one claim and v2 was written "
+                            "after seeing v1's errors on the same 60 train claims; v2 is a train-only ablation",
+            "nei_recheck": "maximise (fixes - harms) over tau in 0.5/0.7/0.9/0.95/0.98 subject to fixes > harms; "
+                           "if none qualifies the rule is dropped and B1/B2 are the polarity-only variants",
+        },
+        "nei_recheck_decision": {"kept": rule_kept, "tuning": nei},
+        "pre_declared_analysis": {
+            "primary": ["B1 - B0: macro-F1 (keep policy)", "B1 - B0: contradiction recall (keep policy)"],
+            "secondary_isolating_components": [
+                "N - B3 (the NEI recheck alone)", "B1p - B0 and B2p - B0 (polarity checks alone)",
+                "B1 - B1p and B2 - B2p (the recheck added to each polarity check)", "B1 - B2 (LLM vs NLI critic)",
+            ],
+            "method": "paired bootstrap over claims, 5000 resamples, 95% percentile intervals; the abstain policy is "
+                      "reported alongside. Secondary comparisons are exploratory and uncorrected.",
+            "no_changes_after_freeze": "no prompt, rule, threshold or policy changes once the dev run starts; "
+                                       "the dev run executes once",
+        },
         "train_evidence": evidence,
+        "train_final_result_file": train_final.name if train_final.exists() else None,
+        "budget": {
+            "global_cap_inr": budget.max_inr, "global_cap_requests": budget.max_calls,
+            "dev_phase_cap_inr": 250, "per_call_tripwire_usd": budget.tripwire_usd,
+            "thinking_tokens": "logged, not a stop condition",
+        },
+        "dev_arms": arms,
         "dev_run_command": (
             f"python scripts/run_verification.py --stage run --split dev --label frozen "
             f"--judge-version {args.judge_version} --relation-version {args.relation_version} "
             f"--thinking {args.thinking} --k {args.k} --max-attempts {args.max_attempts} "
-            f"--arms B0,B3,N,B1p,B2p,B1,B2,A,oracle --workers {args.workers} "
-            "--validation-gold 188 --validation-shuffled 60"
+            f"--arms {','.join(dev_arm_order)} "
+            f"--workers {args.workers} --rpm {args.rpm} --validation-gold 188 --validation-shuffled 60 "
+            "--phase dev --phase-cap-inr 250"
         ),
     }
     FREEZE_PATH.write_text(json.dumps(freeze, indent=1), encoding="utf-8")
@@ -495,6 +527,7 @@ def main() -> int:
     p.add_argument("--validation-gold", type=int, default=0, help="LLM-checker items from gold rationales")
     p.add_argument("--validation-shuffled", type=int, default=0, help="LLM-checker shuffled-claim negative controls")
     p.add_argument("--evidence", nargs="*", default=[], help="train result labels to record in the freeze file")
+    p.add_argument("--train-final", default="v1-final", help="final train result label to cite in the freeze")
     args = p.parse_args()
     args.workers = max(1, min(8, args.workers))
 

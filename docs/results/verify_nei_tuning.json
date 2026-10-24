@@ -1,0 +1,41 @@
+{
+ "tau": 0.5,
+ "table": {
+  "0.5": {
+   "flagged": 23,
+   "fixed": 2,
+   "harmed": 0,
+   "net": 2
+  },
+  "0.7": {
+   "flagged": 20,
+   "fixed": 1,
+   "harmed": 0,
+   "net": 1
+  },
+  "0.9": {
+   "flagged": 14,
+   "fixed": 1,
+   "harmed": 0,
+   "net": 1
+  },
+  "0.95": {
+   "flagged": 11,
+   "fixed": 1,
+   "harmed": 0,
+   "net": 1
+  },
+  "0.98": {
+   "flagged": 9,
+   "fixed": 1,
+   "harmed": 0,
+   "net": 1
+  }
+ },
+ "nei_verdicts": 29,
+ "false_nei": 9,
+ "correct_nei": 20,
+ "source": "verify_train_v1-explore.json",
+ "lowest_threshold_run": 0.5,
+ "split": "train"
+}
