@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import threading
 import time
@@ -32,6 +33,8 @@ from datetime import datetime
 from pathlib import Path
 
 from .budget import Budget, BudgetExceeded
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_RPM = 10
 DEFAULT_TPM = 200_000
@@ -99,12 +102,28 @@ class Ledger:
             self._data.setdefault("lifetime", {"calls": 0, "usd": 0.0})
 
     def _save(self) -> None:
+        """Persist the ledger. Never raises: the in-memory totals stay authoritative if the disk misbehaves.
+
+        On Windows ``os.replace`` can fail transiently while an indexer or antivirus holds the destination,
+        so it is retried; as a last resort the file is written in place. A bookkeeping failure must never be
+        able to discard the response to a request that has already been paid for.
+        """
         if self.path is None:
             return
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(self._data, indent=1, sort_keys=True), encoding="utf-8")
-        os.replace(tmp, self.path)
+        payload = json.dumps(self._data, indent=1, sort_keys=True)
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            for attempt in range(8):
+                tmp = self.path.with_name(f"{self.path.name}.{threading.get_ident()}.tmp")
+                try:
+                    tmp.write_text(payload, encoding="utf-8")
+                    os.replace(tmp, self.path)
+                    return
+                except OSError:
+                    time.sleep(0.05 * (attempt + 1))
+            self.path.write_text(payload, encoding="utf-8")
+        except OSError as err:
+            logger.error("could not save the spend ledger %s (%s); continuing with in-memory totals", self.path, err)
 
     def count_today(self) -> int:
         with self._lock:

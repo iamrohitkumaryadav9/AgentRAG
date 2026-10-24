@@ -270,3 +270,16 @@ def test_error_translation_recognises_rate_limits_daily_quotas_and_transient_fai
 
     assert isinstance(translate_error(503, "UNAVAILABLE", "busy", {}), TransientError)
     assert translate_error(400, "INVALID_ARGUMENT", "bad request", {}) is None
+
+
+def test_a_bookkeeping_failure_after_a_paid_call_never_discards_the_response(tmp_path, monkeypatch):
+    client = _client(tmp_path, FakeTransport(RawResponse(GOOD, prompt_tokens=2000, output_tokens=80)),
+                     budget=Budget())
+
+    def boom(usd):
+        raise OSError("ledger disk error")
+
+    monkeypatch.setattr(client.limiter.ledger, "add_spend", boom)
+    result = _gen(client, "paid for once")
+    assert result.parsed.verdict is Verdict.SUPPORT
+    assert _gen(client, "paid for once").from_cache  # it was cached despite the accounting failure

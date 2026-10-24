@@ -97,3 +97,36 @@ def test_limits_come_from_environment_with_zero_meaning_unlimited(monkeypatch):
     monkeypatch.setenv("AGENTRAG_GEMINI_RPD", "1500")
     monkeypatch.setenv("AGENTRAG_GEMINI_MAX_CALLS", "300")
     assert limits_from_env() == Limits(rpm=15, tpm=None, rpd=1500, max_calls=300)
+
+
+def test_a_transient_windows_style_replace_failure_is_retried_and_never_raises(tmp_path, monkeypatch):
+    import os
+
+    real_replace, calls = os.replace, {"n": 0}
+
+    def flaky_replace(src, dst):
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            raise PermissionError(5, "Access is denied")
+        return real_replace(src, dst)
+
+    monkeypatch.setattr("agentrag.verify.ratelimit.os.replace", flaky_replace)
+    monkeypatch.setattr("agentrag.verify.ratelimit.time.sleep", lambda s: None)
+    limiter, _ = _limiter(Limits(rpm=None, tpm=None), tmp_path)
+    limiter.acquire()
+    assert calls["n"] == 3
+    reloaded = RateLimiter(Limits(rpm=None, tpm=None), tmp_path / "ledger.json", day_fn=lambda: "d")
+    assert reloaded.ledger.lifetime()["calls"] == 1  # the retried write did land
+
+
+def test_a_ledger_that_cannot_be_written_at_all_keeps_counting_in_memory(tmp_path, monkeypatch):
+    def always_fail(src, dst):
+        raise PermissionError(5, "Access is denied")
+
+    monkeypatch.setattr("agentrag.verify.ratelimit.os.replace", always_fail)
+    monkeypatch.setattr("agentrag.verify.ratelimit.time.sleep", lambda s: None)
+    monkeypatch.setattr("pathlib.Path.write_text", lambda self, *a, **k: (_ for _ in ()).throw(OSError("disk full")))
+    limiter, _ = _limiter(Limits(rpm=None, tpm=None), tmp_path)
+    limiter.acquire()
+    limiter.settle(0.01)
+    assert limiter.ledger.lifetime() == {"calls": 1, "usd": 0.01}

@@ -13,6 +13,7 @@ output tokens and are tracked separately.
 """
 from __future__ import annotations
 
+import logging
 import random
 import threading
 import time
@@ -33,6 +34,8 @@ from .schemas import parse_model_json
 PRICES_USD_PER_M: dict[str, tuple[float, float]] = {"gemini-3.8-flash": (0.75, 3.75)}
 
 THINKING_LEVELS = ("default", "low", "medium", "high")
+
+logger = logging.getLogger(__name__)
 
 
 class TransientError(RuntimeError):
@@ -358,5 +361,8 @@ class GeminiClient:
                 self.limiter.record_tokens(raw.prompt_tokens + raw.output_tokens + raw.thought_tokens, handle)
                 return raw, (time.perf_counter() - start) * 1000, sent
             finally:
-                self.limiter.settle(charge)  # release the reservation; charge the real cost if there was one
+                try:
+                    self.limiter.settle(charge)  # release the reservation; charge the real cost if there was one
+                except Exception:  # noqa: BLE001 - bookkeeping must never discard a response that was paid for
+                    logger.exception("could not record spend of $%.5f; the response is still cached", charge)
         raise AssertionError("unreachable")  # pragma: no cover
