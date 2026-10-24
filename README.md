@@ -1,6 +1,6 @@
 # AgentRAG — Multi-Agent RAG with a Pre-Registered LLM Evaluation
 
-*An individual project by [Rohit Kumar](https://github.com/iamrohitkumaryadav9).*
+*An individual project by [Rohit Kumar](https://github.com/iamrohitkumaryadav9).* · **[Live demo](https://agentragpreregisteredllm.streamlit.app/)**
 
 AgentRAG is a retrieval-augmented generation (RAG) service built around a **multi-agent LangGraph workflow**:
 a router decides whether a query needs retrieval, a retriever searches a hybrid BM25 + dense index and refuses
@@ -30,7 +30,7 @@ every agent step is traced with **OpenTelemetry**.
 
 ## Live demo
 
-**Try it in the browser: https://YOUR-APP-NAME.streamlit.app** *(placeholder: replace with the URL Streamlit assigns after you deploy)*
+**Try it in the browser: [agentragpreregisteredllm.streamlit.app](https://agentragpreregisteredllm.streamlit.app/)** (runs offline with no key; paste your own Gemini key for LLM answers)
 
 A Streamlit app (`app.py`) lets you upload PDF / Markdown / text files, or press **Use sample docs**, and ask
 questions. For every question it shows the answer, citations with source snippets, the critic's verdict and
