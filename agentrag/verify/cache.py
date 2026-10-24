@@ -16,6 +16,7 @@ import hashlib
 import json
 import os
 import re
+import threading
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -63,9 +64,13 @@ def make_key(
 
 
 class ResponseCache:
-    def __init__(self, path: Path | str | None, offline: bool = False) -> None:
+    def __init__(self, path: Path | str | None, offline: bool = False, enabled: bool = True) -> None:
+        """``enabled=False`` stores nothing and always misses: for long-running services, where an
+        in-memory cache of every prompt would grow without bound."""
         self.path = Path(path) if path is not None else None
         self.offline = offline
+        self.enabled = enabled
+        self._lock = threading.Lock()  # concurrent workers share one cache
         self._entries: dict[str, CachedResponse] = {}
         if self.path is not None and self.path.exists():
             self._load()
@@ -83,18 +88,21 @@ class ResponseCache:
                     continue  # a partial last line from an interrupted write; the next put re-adds it
 
     def get(self, key: str) -> CachedResponse | None:
-        return self._entries.get(key)
+        return self._entries.get(key) if self.enabled else None
 
     def put(self, response: CachedResponse) -> None:
-        self._entries[response.key] = response
-        if self.path is None:
+        if not self.enabled:
             return
-        self.path.parent.mkdir(parents=True, exist_ok=True)
         line = json.dumps(asdict(response), ensure_ascii=False, sort_keys=True)
-        with open(self.path, "a", encoding="utf-8") as fh:
-            fh.write(line + "\n")
-            fh.flush()
-            os.fsync(fh.fileno())
+        with self._lock:
+            self._entries[response.key] = response
+            if self.path is None:
+                return
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.path, "a", encoding="utf-8") as fh:
+                fh.write(line + "\n")
+                fh.flush()
+                os.fsync(fh.fileno())
 
     def __len__(self) -> int:
         return len(self._entries)

@@ -2,8 +2,9 @@
 """Run the SciFact claim-verification experiment.
 
 Stages
-  tune-nli   pick the NLI critic's confidence threshold on the *train* split (no API calls)
+  tune-nli   pick the NLI critic's confidence thresholds on the *train* split (no API calls)
   run        retrieve, judge, critique and retry; evaluate every arm
+  freeze     record the configuration the final dev run will use (docs/results/verify_freeze.json)
 
 Arms
   B0  Gemini judge, no critic
@@ -14,15 +15,17 @@ Arms
   oracle  judge given the gold abstracts, no critic     (separates retrieval from judging errors)
 
 Safety rails
+  * Budget, enforced in code (agentrag/verify/budget.py): all API calls stop at Rs 600 of tracked spend or 2,000
+    requests, whichever comes first. Spend is computed from token counts and persisted in a per-key ledger.
+  * Tripwire: a call costing more than 2x the ~$0.002 estimate, or any thinking token, stops every worker.
+  * Responses are cached before anything else happens; a cached prompt is never requested again.
   * ``--split train`` uses a seeded 60-claim stratified subset for prompt development.
-  * ``--split dev`` (the 300 BEIR test claims) refuses to run unless docs/results/verify_freeze.json
-    exists with a fingerprint matching the current prompts and settings, and refuses to overwrite
-    an earlier dev result: the final run happens once, with a configuration committed beforehand.
-  * every response is cached; ``--offline`` makes any uncached request an error.
+  * ``--split dev`` (the 300 BEIR test claims) refuses to run unless docs/results/verify_freeze.json exists with a
+    fingerprint matching the current prompts and settings, and refuses to overwrite an earlier dev result.
 
 Usage
   python scripts/run_verification.py --stage tune-nli
-  python scripts/run_verification.py --stage run --split train --arms B0,B1,B2,B3,A --label v1-low
+  python scripts/run_verification.py --stage run --split train --arms B0 --label v1-low --workers 6
 """
 from __future__ import annotations
 
@@ -30,7 +33,11 @@ import argparse
 import dataclasses
 import json
 import sys
+import threading
 import time
+from collections.abc import Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 from pathlib import Path
 
 from agentrag.bench import data as beir_data
@@ -38,6 +45,7 @@ from agentrag.bench.registry import CACHE, RESULTS, make_getter
 from agentrag.bench.stats import paired_bootstrap_metric
 from agentrag.config import settings
 from agentrag.verify import data as sf_data
+from agentrag.verify.budget import Budget, BudgetExceeded, TripwireError, budget_from_env
 from agentrag.verify.cache import ResponseCache, find_secrets
 from agentrag.verify.critic import Critic, LlmPolarityChecker
 from agentrag.verify.experiment import (
@@ -50,20 +58,25 @@ from agentrag.verify.experiment import (
     tune_tau,
     validation_items,
 )
-from agentrag.verify.gemini import THINKING_LEVELS, BudgetExceeded, GeminiClient, GenaiTransport
+from agentrag.verify.gemini import THINKING_LEVELS, GeminiClient, GenaiTransport, Halted
 from agentrag.verify.graph import build_verify_graph, verify_claim
 from agentrag.verify.judge import Judge
 from agentrag.verify.metrics import checker_validation, contradiction_recall, macro_f1
 from agentrag.verify.nli import NLI_MODEL, NliPolarityChecker, NliScorer
 from agentrag.verify.prompts import JUDGE_VERSION, RELATION_VERSION, config_fingerprint
-from agentrag.verify.ratelimit import DailyBudgetExhausted, RateLimiter, limits_from_env
+from agentrag.verify.ratelimit import (
+    DailyBudgetExhausted,
+    RateLimiter,
+    ledger_path_for_key,
+    limits_from_env,
+)
 
 CACHE_PATH = RESULTS / "verify_cache.jsonl"
-LEDGER_PATH = Path(".verify_state/ledger.json")
 NLI_TUNING = RESULTS / "verify_nli_tuning.json"
 NLI_ONLY_TUNING = RESULTS / "verify_nli_only_tuning.json"
 FREEZE_PATH = RESULTS / "verify_freeze.json"
 MODEL = settings.gemini_model
+STOPPING = (DailyBudgetExhausted, BudgetExceeded, TripwireError, Halted)
 
 
 def load_json(path: Path):
@@ -86,7 +99,7 @@ def retrieve(sf: sf_data.SciFact, claims, k: int) -> dict[str, list[str]]:
 
 
 def tune_nli_stage(sf: sf_data.SciFact) -> None:
-    """Choose the NLI critic threshold using TRAIN-split human evidence only (no API calls)."""
+    """Choose the NLI critic thresholds using TRAIN-split human evidence only (no API calls)."""
     scorer = NliScorer()
     items = validation_items(sf, sf.train, seed=0)
     probs = scorer.score_many([(" ".join(i["sentences"]), i["claim"]) for i in items])
@@ -105,15 +118,18 @@ def tune_nli_stage(sf: sf_data.SciFact) -> None:
     print("per-class recall:", {k: round(v['recall'], 3) for k, v in tuned["per_class_recall"].items()})
 
 
-def build_client(args, offline: bool) -> tuple[GeminiClient, ResponseCache]:
+def build_client(args, offline: bool) -> tuple[GeminiClient, ResponseCache, Budget]:
     cache = ResponseCache(CACHE_PATH, offline=offline)
-    limits = limits_from_env()
+    key = settings.google_api_key or ""
+    limits = dataclasses.replace(limits_from_env(), rpm=args.rpm or limits_from_env().rpm, tpm=None)
     if args.max_calls is not None:
         limits = dataclasses.replace(limits, max_calls=args.max_calls)
-    limiter = RateLimiter(limits, LEDGER_PATH)
-    transport = None if offline else GenaiTransport(MODEL, settings.google_api_key or "")
-    client = GeminiClient(MODEL, cache, limiter, transport, thinking=args.thinking, max_usd=args.max_usd)
-    return client, cache
+    budget = budget_from_env()
+    # one ledger per API key: a new key (project, quota, credits) never inherits another project's totals
+    limiter = RateLimiter(limits, ledger_path_for_key(key) if key else None, budget=budget)
+    transport = None if offline else GenaiTransport(MODEL, key)
+    client = GeminiClient(MODEL, cache, limiter, transport, thinking=args.thinking)
+    return client, cache, budget
 
 
 def current_config(args) -> dict:
@@ -122,17 +138,50 @@ def current_config(args) -> dict:
         "max_attempts": args.max_attempts, "judge_version": args.judge_version,
         "relation_version": args.relation_version, "nli_model": NLI_MODEL,
         "nli_taus": nli_taus() if NLI_TUNING.exists() else None,
+        "nli_only_tau": load_json(NLI_ONLY_TUNING)["tau"] if NLI_ONLY_TUNING.exists() else None,
         "failure_policy_reported": ["keep", "abstain"], "primary_failure_policy": "keep",
         "retrieval": "hybrid-bge (BM25 + bge-small-en-v1.5, RRF k=60, depth 100)",
     }
 
 
-def check_freeze(config: dict, fingerprint: str) -> None:
+def fingerprint_for(args) -> tuple[dict, str]:
+    config = current_config(args)
+    rest = {k: v for k, v in config.items() if k not in ("judge_version", "relation_version")}
+    return config, config_fingerprint(args.judge_version, args.relation_version, **rest)
+
+
+def check_freeze(fingerprint: str) -> None:
     if not FREEZE_PATH.exists():
         sys.exit(f"refusing to run on dev: {FREEZE_PATH} does not exist (freeze the configuration first)")
     frozen = load_json(FREEZE_PATH)
     if frozen["fingerprint"] != fingerprint:
         sys.exit(f"refusing to run on dev: configuration fingerprint {fingerprint} != frozen {frozen['fingerprint']}")
+
+
+def run_parallel(label: str, items: Sequence, fn: Callable, workers: int, client: GeminiClient) -> list:
+    """Map ``fn`` over ``items`` with a bounded worker pool, preserving order.
+
+    The first failure (tripwire, budget, quota, anything) halts the client so no worker sends another
+    request, then re-raises. Cached prompts are already on disk, so a stopped run resumes where it left off.
+    """
+    results: list = [None] * len(items)
+    done = 0
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(fn, item): i for i, item in enumerate(items)}
+        try:
+            for future in as_completed(futures):
+                results[futures[future]] = future.result()
+                done += 1
+                if done % 10 == 0 or done == len(items):
+                    spend = client.limiter.spend_summary()
+                    print(f"  {label}: {done}/{len(items)} | requests this run {client.api_calls} | "
+                          f"spend Rs {spend.get('lifetime_inr', 0):.2f}", flush=True)
+        except BaseException as exc:
+            client.halt(f"{type(exc).__name__}: {exc}")
+            for future in futures:
+                future.cancel()
+            raise
+    return results
 
 
 def compare(claims, outcomes_by_arm) -> dict:
@@ -168,7 +217,14 @@ def validate_checkers(args, sf, claims, client, nli_checker) -> dict:
     for name, checker in checkers.items():
         gold, shuffled = subsets[name]
         chosen = gold + shuffled
-        predicted = [checker.relation(i["claim"], i["sentences"]).relation.value for i in chosen]
+
+        def predict(item, checker=checker):
+            return checker.relation(item["claim"], item["sentences"]).relation.value
+
+        if name == "llm":
+            predicted = run_parallel("checker-validation", chosen, predict, args.workers, client)
+        else:
+            predicted = [predict(i) for i in chosen]
         gold_pred, shuffled_pred = predicted[: len(gold)], predicted[len(gold):]
         result[name] = {
             "items": {"gold": len(gold), "shuffled": len(shuffled)},
@@ -178,19 +234,24 @@ def validate_checkers(args, sf, claims, client, nli_checker) -> dict:
     return result
 
 
+def spend_line(limiter: RateLimiter, budget: Budget) -> str:
+    s = limiter.spend_summary()
+    return (f"lifetime {s['lifetime_calls']} requests, ${s['lifetime_usd']:.4f} = Rs {s['lifetime_inr']:.2f} "
+            f"(caps: Rs {budget.max_inr:.0f} / {budget.max_calls} requests)")
+
+
 def run_stage(args) -> int:
     sf = sf_data.load(CACHE)
     claims = sf.dev if args.split == "dev" else sf_data.stratified_subset(sf.train, args.per_label, args.seed)
     arms = [a.strip() for a in args.arms.split(",") if a.strip()]
-    fingerprint = config_fingerprint(args.judge_version, args.relation_version, **{
-        k: v for k, v in current_config(args).items() if k not in ("judge_version", "relation_version")})
-    config = {**current_config(args), "fingerprint": fingerprint}
+    config, fingerprint = fingerprint_for(args)
+    config = {**config, "fingerprint": fingerprint}
     out_path = RESULTS / f"verify_{args.split}_{args.label}.json"
     if args.split == "dev":
-        check_freeze(config, fingerprint)
+        check_freeze(fingerprint)
         if out_path.exists() and not args.offline:
             sys.exit(f"refusing to overwrite {out_path}: the dev run happens once per frozen configuration")
-    print(f"split={args.split} claims={len(claims)} arms={arms} fingerprint={fingerprint}\n"
+    print(f"split={args.split} claims={len(claims)} arms={arms} workers={args.workers} fingerprint={fingerprint}\n"
           f"model={MODEL} thinking={args.thinking} judge={args.judge_version} relation={args.relation_version}")
 
     retrieved = retrieve(sf, claims, args.k)
@@ -202,7 +263,8 @@ def run_stage(args) -> int:
         for k in (1, args.k)
     }
 
-    client, cache = build_client(args, args.offline)
+    client, cache, budget = build_client(args, args.offline)
+    print("budget:", spend_line(client.limiter, budget))
     judge = Judge(client, args.judge_version)
     scorer, nli_checker = None, None
     if {"B2", "A"} & set(arms) or args.validation_gold or args.validation_shuffled:
@@ -210,7 +272,13 @@ def run_stage(args) -> int:
             sys.exit("run --stage tune-nli first")
         scorer = NliScorer()
         tau_e, tau_c = nli_taus()
-        nli_checker = NliPolarityChecker(scorer.score, tau_e, tau_c)
+        nli_lock = threading.Lock()  # the torch model is shared by all workers
+
+        def locked_score(premise: str, hypothesis: str):
+            with nli_lock:
+                return scorer.score(premise, hypothesis)
+
+        nli_checker = NliPolarityChecker(locked_score, tau_e, tau_c)
 
     llm_checker = LlmPolarityChecker(client, args.relation_version)
     graphs = {
@@ -226,12 +294,10 @@ def run_stage(args) -> int:
     started = time.time()
     try:
         for arm in [a for a in ("B0", "B3", "B1", "B2") if a in arms]:
-            outcomes = []
-            for n, claim in enumerate(claims, start=1):
-                outcomes.append(verify_claim(graphs[arm], claim.text, docs[claim.id]))
-                if n % 10 == 0:
-                    print(f"  {arm}: {n}/{len(claims)} claims | api calls this run {client.api_calls} | "
-                          f"ledger today {client.limiter.ledger.count_today()}", flush=True)
+            outcomes = run_parallel(
+                arm, claims, lambda claim, arm=arm: verify_claim(graphs[arm], claim.text, docs[claim.id]),
+                args.workers, client,
+            )
             outcomes_by_arm[arm] = outcomes
             results["arms"][arm] = {
                 "metrics": evaluate_arm(claims, outcomes, docs),
@@ -247,7 +313,10 @@ def run_stage(args) -> int:
         if "oracle" in arms:
             oracle_graph = build_verify_graph(judge, None, args.max_attempts)
             oracle_docs_by_id = {c.id: oracle_docs(sf, c) for c in claims}
-            outcomes = [verify_claim(oracle_graph, c.text, oracle_docs_by_id[c.id]) for c in claims]
+            outcomes = run_parallel(
+                "oracle", claims, lambda c: verify_claim(oracle_graph, c.text, oracle_docs_by_id[c.id]),
+                args.workers, client,
+            )
             results["arms"]["oracle"] = {
                 "metrics": evaluate_arm(claims, outcomes, oracle_docs_by_id),
                 "claims": [
@@ -278,24 +347,64 @@ def run_stage(args) -> int:
         results["comparisons"] = compare(claims, outcomes_by_arm)
         if args.validation_gold or args.validation_shuffled or nli_checker:
             results["checker_validation"] = validate_checkers(args, sf, claims, client, nli_checker)
-            print("checker validation:", json.dumps(results["checker_validation"])[:600])
-    except (DailyBudgetExhausted, BudgetExceeded) as err:
-        print(f"\nSTOPPED: {err}\nEverything completed so far is cached; rerun the same command to resume.")
+            print("checker validation:", json.dumps(results["checker_validation"])[:700])
+    except STOPPING as err:
+        reason = client.halt_reason or str(err)
+        print(f"\nSTOPPED: {reason}\n{spend_line(client.limiter, budget)}\n"
+              "Everything completed so far is cached; rerun the same command to resume.")
         return 2
 
-    results["spend"] = {"api_calls_this_run": client.api_calls, "paid_equivalent_usd_this_run": client.spent_usd,
-                        "wall_seconds": round(time.time() - started, 1), "cache_entries": len(cache)}
+    results["spend"] = {
+        **client.limiter.spend_summary(),
+        "api_requests_this_run": client.api_calls,
+        "paid_equivalent_usd_this_run": client.spent_usd,
+        "wall_seconds": round(time.time() - started, 1),
+        "cache_entries": len(cache),
+        "workers": args.workers,
+    }
     out_path.write_text(json.dumps(results, indent=1), encoding="utf-8")
     leaks = find_secrets(CACHE_PATH.read_text(encoding="utf-8")) if CACHE_PATH.exists() else []
     size_mb = CACHE_PATH.stat().st_size / 1e6 if CACHE_PATH.exists() else 0.0
-    print(f"\nwrote {out_path} | api calls this run {client.api_calls} | cache {len(cache)} entries, {size_mb:.2f} MB, "
-          f"secret patterns found: {leaks or 'none'}")
+    print(f"\nwrote {out_path} | requests this run {client.api_calls} | {spend_line(client.limiter, budget)} | "
+          f"cache {len(cache)} entries, {size_mb:.2f} MB, secret patterns found: {leaks or 'none'}")
+    return 0
+
+
+def freeze_stage(args) -> int:
+    """Record the configuration the one-shot dev run must match. Writes docs/results/verify_freeze.json."""
+    config, fingerprint = fingerprint_for(args)
+    evidence = {}
+    for label in args.evidence:
+        path = RESULTS / f"verify_train_{label}.json"
+        if path.exists():
+            arm = load_json(path)["arms"].get("B0")
+            if arm:
+                evidence[label] = {
+                    "judge_version": load_json(path)["config"]["judge_version"],
+                    "b0_macro_f1": arm["metrics"]["initial"]["macro_f1"],
+                    "b0_contradiction_recall": arm["metrics"]["initial"]["per_class"]["CONTRADICT"]["recall"],
+                }
+    freeze = {
+        "fingerprint": fingerprint,
+        "frozen_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "config": config,
+        "selection_rule": "higher B0 macro-F1 on the same 60 train claims; ties keep the earlier version",
+        "train_evidence": evidence,
+        "dev_run_command": (
+            f"python scripts/run_verification.py --stage run --split dev --label frozen "
+            f"--judge-version {args.judge_version} --relation-version {args.relation_version} "
+            f"--thinking {args.thinking} --k {args.k} --max-attempts {args.max_attempts} "
+            f"--arms B0,B3,B1,B2,A,oracle --workers {args.workers} --validation-gold 188 --validation-shuffled 60"
+        ),
+    }
+    FREEZE_PATH.write_text(json.dumps(freeze, indent=1), encoding="utf-8")
+    print(f"froze fingerprint {fingerprint}\n{json.dumps(freeze['config'], indent=1)}")
     return 0
 
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--stage", choices=("tune-nli", "run"), default="run")
+    p.add_argument("--stage", choices=("tune-nli", "run", "freeze"), default="run")
     p.add_argument("--split", choices=("train", "dev"), default="train")
     p.add_argument("--arms", default="B0,B1,B2,B3")
     p.add_argument("--label", default="run")
@@ -306,17 +415,22 @@ def main() -> int:
     p.add_argument("--judge-version", default=JUDGE_VERSION)
     p.add_argument("--relation-version", default=RELATION_VERSION)
     p.add_argument("--thinking", choices=THINKING_LEVELS, default="low")
+    p.add_argument("--workers", type=int, default=6, help="concurrent claims (1-8)")
+    p.add_argument("--rpm", type=int, default=60, help="client-side requests per minute (paid-tier guess)")
     p.add_argument("--offline", action="store_true", help="cache only; any uncached request is an error")
-    p.add_argument("--max-calls", type=int, default=None, help="hard cap on API requests for this run")
-    p.add_argument("--max-usd", type=float, default=None, help="stop at this paid-equivalent spend")
+    p.add_argument("--max-calls", type=int, default=None, help="extra cap on API requests for this run")
     p.add_argument("--validation-gold", type=int, default=0, help="LLM-checker items from gold rationales")
     p.add_argument("--validation-shuffled", type=int, default=0, help="LLM-checker shuffled-claim negative controls")
+    p.add_argument("--evidence", nargs="*", default=[], help="train result labels to record in the freeze file")
     args = p.parse_args()
+    args.workers = max(1, min(8, args.workers))
 
     sf = sf_data.load(CACHE)
     if args.stage == "tune-nli":
         tune_nli_stage(sf)
         return 0
+    if args.stage == "freeze":
+        return freeze_stage(args)
     return run_stage(args)
 
 

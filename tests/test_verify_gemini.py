@@ -2,10 +2,11 @@ import json
 
 import pytest
 
+from agentrag.verify.budget import Budget, BudgetExceeded, TripwireError
 from agentrag.verify.cache import FIELDS, ResponseCache, find_secrets
 from agentrag.verify.gemini import (
-    BudgetExceeded,
     GeminiClient,
+    Halted,
     InvalidModelOutput,
     RateLimitError,
     RawResponse,
@@ -34,11 +35,11 @@ class FakeTransport:
         return step
 
 
-def _client(tmp_path, transport, *, offline=False, limits=None, **kwargs):
+def _client(tmp_path, transport, *, offline=False, limits=None, budget=None, **kwargs):
     sleeps = []
     cache = ResponseCache(tmp_path / "cache.jsonl", offline=offline)
-    limiter = RateLimiter(limits or Limits(rpm=None, tpm=None), tmp_path / "ledger.json", sleep=lambda s: None,
-                          day_fn=lambda: "2026-10-24")
+    limiter = RateLimiter(limits or Limits(rpm=None, tpm=None), tmp_path / "ledger.json", budget=budget,
+                          sleep=lambda s: None, day_fn=lambda: "2026-10-24")
     client = GeminiClient("gemini-3.8-flash", cache, limiter, transport, sleep=sleeps.append, **kwargs)
     client.sleeps = sleeps
     return client
@@ -150,17 +151,95 @@ def test_a_daily_quota_429_stops_the_run_and_blocks_further_calls(tmp_path):
     assert len(transport.requests) == 1
 
 
-def test_paid_equivalent_cost_counts_thinking_as_output_and_a_cap_can_stop_the_run(tmp_path):
+def test_paid_equivalent_cost_counts_thinking_as_output():
     assert cost_usd("gemini-3.8-flash", 1_000_000, 0, 0) == pytest.approx(0.75)
     assert cost_usd("gemini-3.8-flash", 0, 500_000, 500_000) == pytest.approx(3.75)
     assert cost_usd("unknown-model", 10**6, 10**6, 10**6) == 0.0
 
-    transport = FakeTransport(RawResponse(GOOD, prompt_tokens=1_000_000))
-    client = _client(tmp_path, transport, max_usd=0.50)
-    _gen(client)
-    assert client.spent_usd == pytest.approx(0.75)
-    with pytest.raises(BudgetExceeded):
-        _gen(client, prompt="a different request")
+
+def test_spend_is_charged_to_the_persistent_ledger_and_survives_a_new_client(tmp_path):
+    budget = Budget(max_calls=100, max_inr=600.0)
+    cheap = RawResponse(GOOD, prompt_tokens=2000, output_tokens=80)  # ~ $0.0018
+    client = _client(tmp_path, FakeTransport(cheap, cheap), budget=budget)
+    _gen(client, "one")
+    _gen(client, "two")
+    summary = client.limiter.spend_summary()
+    assert summary["lifetime_calls"] == 2 and summary["lifetime_usd"] == pytest.approx(2 * 0.0018, rel=0.01)
+    assert summary["lifetime_inr"] == pytest.approx(budget.inr(summary["lifetime_usd"]))
+    reloaded = _client(tmp_path, FakeTransport(), budget=budget)
+    assert reloaded.limiter.spend_summary()["lifetime_calls"] == 2
+
+
+def test_the_hard_spend_cap_stops_before_the_request_that_would_cross_it(tmp_path):
+    # a $0.005 cap leaves room for one call's worst-case reservation ($0.004) but, after a call that really cost
+    # ~$0.0018, not for another reservation on top of it (0.0018 + 0.004 > 0.005)
+    budget = Budget(max_calls=100, max_inr=0.005 * 600 / 6.8)
+    cheap = RawResponse(GOOD, prompt_tokens=2000, output_tokens=80)
+    transport = FakeTransport(cheap, cheap)
+    client = _client(tmp_path, transport, budget=budget)
+    _gen(client, "one")
+    with pytest.raises(BudgetExceeded, match="spend cap"):
+        _gen(client, "two")
+    assert len(transport.requests) == 1
+
+
+def test_the_hard_call_cap_counts_every_request_including_failed_attempts(tmp_path):
+    budget = Budget(max_calls=2, max_inr=None)
+    transport = FakeTransport(TransientError("503"), RawResponse(GOOD))
+    client = _client(tmp_path, transport, budget=budget)
+    _gen(client, "one")  # a failed attempt plus a successful one = 2 requests
+    with pytest.raises(BudgetExceeded, match="call cap"):
+        _gen(client, "two")
+    assert len(transport.requests) == 2
+
+
+def test_tripwire_on_an_expensive_call_halts_everything_but_the_response_is_cached(tmp_path):
+    budget = Budget(max_calls=100, max_inr=600.0, tripwire_usd=0.004)
+    expensive = RawResponse(GOOD, prompt_tokens=5000, output_tokens=100)  # ~ $0.0041
+    transport = FakeTransport(expensive)
+    client = _client(tmp_path, transport, budget=budget)
+    with pytest.raises(TripwireError, match="cost"):
+        _gen(client, "big prompt")
+    assert "cost" in client.halt_reason
+    assert client.cache.get(next(iter(client.cache._entries))) is not None  # paid for once, never again
+    with pytest.raises(Halted):
+        _gen(client, "another prompt")
+    assert len(transport.requests) == 1
+
+
+def test_tripwire_on_thinking_tokens(tmp_path):
+    budget = Budget(max_calls=100, max_inr=600.0)
+    client = _client(tmp_path, FakeTransport(RawResponse(GOOD, prompt_tokens=100, thought_tokens=1)), budget=budget)
+    with pytest.raises(TripwireError, match="thinking"):
+        _gen(client)
+
+
+def test_normal_calls_pass_the_tripwire(tmp_path):
+    client = _client(tmp_path, FakeTransport(RawResponse(GOOD, prompt_tokens=2230, output_tokens=84)),
+                     budget=Budget())
+    assert _gen(client).parsed.verdict is Verdict.SUPPORT
+
+
+def test_concurrent_workers_share_one_client_safely(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+
+    class Echo:
+        def __init__(self):
+            self.count = 0
+
+        def call(self, prompt, schema, temperature, thinking):
+            self.count += 1
+            return RawResponse(GOOD, prompt_tokens=100, output_tokens=10)
+
+    transport = Echo()
+    client = _client(tmp_path, transport, budget=Budget(max_calls=1000))
+    prompts = [f"claim {i}" for i in range(60)]
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(lambda p: _gen(client, p), prompts + prompts))  # every prompt asked twice
+    assert all(r.parsed.verdict is Verdict.SUPPORT for r in results)
+    assert transport.count == 60  # each distinct prompt was paid for exactly once, even when asked concurrently
+    assert client.limiter.spend_summary()["lifetime_calls"] == transport.count
+    assert len(client.cache) == 60
 
 
 def test_the_cache_file_contains_only_declared_fields_and_no_secrets(tmp_path):

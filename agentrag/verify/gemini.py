@@ -14,14 +14,16 @@ output tokens and are tracked separately.
 from __future__ import annotations
 
 import random
+import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Protocol
 
 from pydantic import BaseModel, ValidationError
 
+from .budget import TripwireError
 from .cache import CachedResponse, CacheMiss, ResponseCache, make_key
 from .ratelimit import DailyBudgetExhausted, RateLimiter
 from .schemas import parse_model_json
@@ -51,8 +53,8 @@ class InvalidModelOutput(RuntimeError):
         self.raw, self.responses, self.api_calls = raw, responses, api_calls
 
 
-class BudgetExceeded(RuntimeError):
-    """The configured paid-equivalent spend cap was reached."""
+class Halted(RuntimeError):
+    """Another worker stopped the run (tripwire, budget, quota); this worker should stop quietly."""
 
 
 @dataclass
@@ -64,6 +66,7 @@ class RawResponse:
     finish_reason: str = ""
     model_version: str = ""
     blocked: bool = False
+    diagnostics: dict = field(default_factory=dict)  # never cached; for one-off inspection only
 
 
 class Transport(Protocol):
@@ -132,13 +135,16 @@ def translate_error(code: int | None, status: str | None, message: str, details)
 class GenaiTransport:
     """The google-genai SDK adapter. Imports the SDK lazily; never logs request configuration."""
 
-    def __init__(self, model: str, api_key: str, timeout_seconds: float = 120.0) -> None:
+    def __init__(
+        self, model: str, api_key: str, timeout_seconds: float = 120.0, native_schema: bool = True
+    ) -> None:
         from google import genai
         from google.genai import types
 
         if not api_key:
             raise RuntimeError("GOOGLE_API_KEY is not set")
         self.model = model
+        self.native_schema = native_schema  # False: JSON mode only; the prompt itself describes the schema
         self._types = types
         options = types.HttpOptions(timeout=int(timeout_seconds * 1000))
         self._client = genai.Client(api_key=api_key, http_options=options)
@@ -147,7 +153,9 @@ class GenaiTransport:
         from google.genai import errors
 
         types = self._types
-        config: dict = {"temperature": temperature, "response_mime_type": "application/json", "response_schema": schema}
+        config: dict = {"temperature": temperature, "response_mime_type": "application/json"}
+        if self.native_schema:
+            config["response_schema"] = schema
         if thinking != "default":
             config["thinking_config"] = types.ThinkingConfig(thinking_level=thinking.upper())
         try:
@@ -169,6 +177,15 @@ class GenaiTransport:
             text = response.text or ""
         except ValueError:  # the SDK raises when there is no text part (e.g. a safety stop)
             text, blocked = "", True
+        http = getattr(response, "sdk_http_response", None)
+        populated = {k for k, v in (usage.model_dump() if usage else {}).items() if v not in (None, [], {})}
+        diagnostics = {
+            # names of populated usage fields and of response headers: enough to see what the API reports about
+            # the request (e.g. traffic type) without ever recording a header value
+            "usage_fields": sorted(populated),
+            "traffic_type": str(getattr(usage, "traffic_type", None)),
+            "header_names": sorted((getattr(http, "headers", None) or {}).keys()),
+        }
         return RawResponse(
             text=text,
             prompt_tokens=getattr(usage, "prompt_token_count", 0) or 0,
@@ -177,6 +194,7 @@ class GenaiTransport:
             finish_reason=finish,
             model_version=getattr(response, "model_version", "") or "",
             blocked=blocked and not text,
+            diagnostics=diagnostics,
         )
 
 
@@ -192,7 +210,6 @@ class GeminiClient:
         temperature: float = 0.0,
         max_retries: int = 5,
         base_delay: float = 2.0,
-        max_usd: float | None = None,
         sleep: Callable[[float], None] = time.sleep,
         rng: random.Random | None = None,
     ) -> None:
@@ -200,10 +217,22 @@ class GeminiClient:
             raise ValueError(f"thinking must be one of {THINKING_LEVELS}, got {thinking!r}")
         self.model, self.cache, self.limiter, self.transport = model, cache, limiter, transport
         self.thinking, self.temperature = thinking, temperature
-        self.max_retries, self.base_delay, self.max_usd = max_retries, base_delay, max_usd
+        self.max_retries, self.base_delay = max_retries, base_delay
         self._sleep, self._rng = sleep, rng or random.Random(0)
-        self.spent_usd = 0.0
+        self._lock = threading.Lock()
+        self._inflight: dict[str, threading.Event] = {}
+        self._halted = threading.Event()
+        self.halt_reason = ""
+        self.spent_usd = 0.0  # this process only; the ledger holds the lifetime total
         self.api_calls = 0
+        self.last_diagnostics: dict = {}
+
+    def halt(self, reason: str) -> None:
+        """Stop all workers: no further request will be sent by this client."""
+        with self._lock:
+            if not self._halted.is_set():
+                self.halt_reason = reason
+                self._halted.set()
 
     # -- public -----------------------------------------------------------------
 
@@ -242,37 +271,76 @@ class GeminiClient:
             model=self.model, prompt_version=prompt_version, temperature=self.temperature,
             thinking=self.thinking, schema=schema.__name__, prompt=prompt, attempt=attempt,
         )
-        hit = self.cache.get(key)
-        if hit is not None:
-            return hit, True, 0
-        if self.cache.offline:
-            raise CacheMiss(f"offline mode and no cached response for {label} (key {key[:12]})")
-        if self.transport is None:
-            raise RuntimeError("no transport configured and the request is not cached")
-        if self.max_usd is not None and self.spent_usd >= self.max_usd:
-            raise BudgetExceeded(f"paid-equivalent spend cap reached (${self.spent_usd:.2f} of ${self.max_usd:.2f})")
+        while True:
+            hit = self.cache.get(key)
+            if hit is not None:
+                return hit, True, 0
+            if self.cache.offline:
+                raise CacheMiss(f"offline mode and no cached response for {label} (key {key[:12]})")
+            if self.transport is None:
+                raise RuntimeError("no transport configured and the request is not cached")
+            if self._halted.is_set():
+                raise Halted(self.halt_reason)
+            # Single flight: if another worker is already requesting this exact prompt, wait for its answer
+            # instead of paying for a duplicate.
+            with self._lock:
+                pending = self._inflight.get(key)
+                if pending is None:
+                    self._inflight[key] = threading.Event()
+                    break
+            pending.wait()
 
+        try:
+            return self._fetch(key, prompt, schema, label)
+        finally:
+            with self._lock:
+                self._inflight.pop(key).set()
+
+    def _fetch(self, key, prompt, schema, label) -> tuple[CachedResponse, bool, int]:
         raw, latency_ms, sent = self._send(prompt, schema)
-        self.api_calls += sent
-        self.spent_usd += cost_usd(self.model, raw.prompt_tokens, raw.output_tokens, raw.thought_tokens)
+        with self._lock:
+            self.api_calls += sent
+            self.spent_usd += cost_usd(self.model, raw.prompt_tokens, raw.output_tokens, raw.thought_tokens)
+            self.last_diagnostics = raw.diagnostics
         response = CachedResponse(
             key=key, label=label, text=raw.text, prompt_tokens=raw.prompt_tokens, output_tokens=raw.output_tokens,
             thought_tokens=raw.thought_tokens, latency_ms=round(latency_ms, 1), model=self.model,
             model_version=raw.model_version, finish_reason=raw.finish_reason, blocked=raw.blocked,
             created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         )
-        self.cache.put(response)
+        self.cache.put(response)  # cached first: a tripwire stop must never cause the same prompt to be paid for twice
+        self._check_tripwire(response)
         return response, False, sent
+
+    def _check_tripwire(self, response: CachedResponse) -> None:
+        budget = self.limiter.budget
+        if budget is None:
+            return
+        cost = cost_usd(self.model, response.prompt_tokens, response.output_tokens, response.thought_tokens)
+        if cost > budget.tripwire_usd:
+            reason = (
+                f"tripwire: one call cost ${cost:.4f}, above the ${budget.tripwire_usd:.4f} limit ({response.label})"
+            )
+        elif response.thought_tokens > 0 and not budget.allow_thinking_tokens:
+            reason = f"tripwire: thinking tokens appeared ({response.thought_tokens}) with thinking={self.thinking!r}"
+        else:
+            return
+        self.halt(reason)
+        raise TripwireError(reason)
 
     def _send(self, prompt: str, schema: type[BaseModel]) -> tuple[RawResponse, float, int]:
         delay, sent = self.base_delay, 0
         estimate = len(prompt) // 4 + 600  # prompt plus room for output and thinking
         for attempt in range(self.max_retries + 1):
-            self.limiter.acquire(estimate)
+            if self._halted.is_set():
+                raise Halted(self.halt_reason)
+            handle = self.limiter.acquire(estimate)
             sent += 1
+            charge = 0.0
             start = time.perf_counter()
             try:
                 raw = self.transport.call(prompt, schema, self.temperature, self.thinking)
+                charge = cost_usd(self.model, raw.prompt_tokens, raw.output_tokens, raw.thought_tokens)
             except RateLimitError as err:
                 if err.daily:
                     self.limiter.exhaust_today(str(err))
@@ -287,6 +355,8 @@ class GeminiClient:
                 self._sleep(err.retry_after if err.retry_after is not None else delay * self._rng.uniform(0.5, 1.5))
                 delay = min(delay * 2, 60.0)
             else:
-                self.limiter.record_tokens(raw.prompt_tokens + raw.output_tokens + raw.thought_tokens)
+                self.limiter.record_tokens(raw.prompt_tokens + raw.output_tokens + raw.thought_tokens, handle)
                 return raw, (time.perf_counter() - start) * 1000, sent
+            finally:
+                self.limiter.settle(charge)  # release the reservation; charge the real cost if there was one
         raise AssertionError("unreachable")  # pragma: no cover
