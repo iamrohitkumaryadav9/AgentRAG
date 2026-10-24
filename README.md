@@ -191,6 +191,42 @@ stays fast and download-free.
 
 Reproduce the numbers with `python scripts/run_complementarity.py`.
 
+## Claim verification on SciFact (frozen configuration, run once)
+
+Can a critic make an LLM judge better? The pipeline retrieves abstracts for a scientific claim, has Gemini
+(`gemini-3.8-flash`) rule SUPPORT / CONTRADICT / NOT_ENOUGH_INFO with cited sentences, then lets a critic (citation
+rules, a blind polarity check, an NLI-based recheck of "not enough info" answers) challenge the verdict and retry. It
+was developed on 60 train claims, **frozen and pushed before the dev claims were touched**, and run once over all 300
+SciFact dev claims (124 SUPPORT, 64 CONTRADICT, 112 NOT_ENOUGH_INFO), with the comparisons and Holm correction
+declared in advance.
+
+| Arm | Macro-F1 | κ vs human labels | CONTRADICT recall | Cost per claim |
+| --- | --- | --- | --- | --- |
+| NLI model alone (no LLM) | 0.499 | 0.288 | 0.84 (precision 0.35) | free |
+| **B0: judge only** | **0.781** | **0.668** | 0.69 | $0.0019 |
+| N: + NEI recheck only | 0.797 | 0.690 | 0.75 | $0.0027 |
+| B1: + LLM polarity check + NEI recheck (main method) | 0.777 | 0.659 | 0.73 | $0.0030 |
+| B2: + NLI polarity check + NEI recheck | 0.770 | 0.654 | 0.69 | $0.0030 |
+| Oracle: judge given the gold abstracts | 0.791 | 0.683 | 0.69 | $0.0009 |
+
+**The main method did not beat the judge alone.** Primary comparison B1 − B0: macro-F1 −0.004 [−0.029, +0.022] and
+contradiction recall +0.047 [−0.016, +0.118], Holm-corrected p = 1.0. The only component with a positive estimate is
+the NEI recheck (contradiction recall +0.062 [+0.014, +0.127]), which does not survive correction across the 16
+declared tests (Holm p = 0.50). The polarity checks lowered accuracy slightly, because the judge rarely gets the
+direction wrong (5 swapped verdicts in 300) and its dominant error, answering "not enough info" when evidence exists
+(47 of 188 claims), is invisible to a polarity check. Giving the judge the gold abstracts changed little (+0.010), so
+retrieval (the right document in the top 5 for 93% of claims) is not the bottleneck. Faithfulness of the cited
+sentences, by the LLM checker: 0.954 (146 of 153 decisive verdicts); the checker itself recovers 64% of human-marked
+entailments, so read that as relative.
+
+**Limitations.** Gemini may have seen SciFact in pretraining, which could inflate absolute scores. With only 64
+CONTRADICT claims, effects under about 0.05–0.06 cannot be resolved. One run, one model, one configuration. Thinking
+cannot be disabled on this model, so it is logged rather than limited. The whole dev run cost about Rs 118 (1,121 API
+requests) against hard caps enforced in code. Full tables, the train-subset development (including a prompt revision
+that did not fix the bias), and every caveat: [docs/claim_verification.md](docs/claim_verification.md). Reproduce the
+tables with no API calls: `python scripts/summarize_verification.py docs/results/verify_dev_frozen.json`; the response
+cache is committed, so `--offline` reruns are free.
+
 ## Quickstart
 
 Requires **Python 3.10+** (developed and verified locally on 3.14; CI runs
@@ -333,18 +369,21 @@ agentrag/
   graph.py          the LangGraph multi-agent workflow
   api.py            FastAPI service
   bench/            SciFact retrieval ablation: metrics, bootstrap stats, systems, error analysis
+  verify/           claim verification: judge, critic (rules, polarity check, NEI recheck), LangGraph retry loop,
+                    cached rate-limited Gemini client, hard budget + tripwires, metrics
 cli.py              terminal demo
-scripts/            index builder, eval runner, ablation / significance / error-analysis runners
-tests/              pytest suite (offline, no external calls)
-docs/               SciFact ablation write-up, error analysis, committed result files
+scripts/            index builder, eval runner, retrieval ablation runners, run_verification.py (tune / freeze / run),
+                    summarize_verification.py
+tests/              pytest suite (offline, no external calls, fake Gemini transport)
+docs/               SciFact ablation, error analysis, claim-verification write-up, committed results + response cache
 data/sample_docs/   built-in knowledge base used by the demo, tests, and eval
 .github/workflows/  CI: test matrix + AI quality gate
 ```
 
 ## Ideas for extending this
 
-- Replace the lexical groundedness heuristic with an NLI or
-  embedding-similarity faithfulness model.
+- Replace the lexical groundedness heuristic in the question-answering graph with the blind polarity check from the
+  claim-verification pipeline (the LLM version recovered 64% of human-marked entailments on SciFact; NLI 54%).
 - Add a tool-use agent node (calculator, web search) alongside retrieval.
 - Swap the in-memory index for a persistent vector database (Chroma,
   Qdrant, pgvector) so `/ingest` doesn't rebuild on every call.
