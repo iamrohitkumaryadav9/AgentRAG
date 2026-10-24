@@ -1,0 +1,123 @@
+{
+ "fingerprint": "231a36b8df199e24",
+ "frozen_at": "2026-10-24T04:17:05+00:00",
+ "config": {
+  "model": "gemini-3.8-flash",
+  "thinking": "low",
+  "temperature": 0.0,
+  "k": 5,
+  "max_attempts": 2,
+  "judge_version": "judge-v1",
+  "relation_version": "relation-v1",
+  "nli_model": "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli",
+  "nli_taus": [
+   0.2,
+   0.6
+  ],
+  "nli_only_tau": 0.9,
+  "nei_recheck_tau": 0.5,
+  "nei_recheck": "NLI over every retrieved sentence; flag a NOT_ENOUGH_INFO verdict if entail or contradict probability > tau and retry once with feedback naming the sentence",
+  "tripwire_usd_per_call": 0.02,
+  "thinking_tokens": "logged and reported per arm; not a stop condition",
+  "failure_policy_reported": [
+   "keep",
+   "abstain"
+  ],
+  "primary_failure_policy": "keep",
+  "retrieval": "hybrid-bge (BM25 + bge-small-en-v1.5, RRF k=60, depth 100)"
+ },
+ "selection_rules": {
+  "judge_prompt": "judge-v1 frozen by decision: judge-v2's macro-F1 edge was one claim and v2 was written after seeing v1's errors on the same 60 train claims; v2 is a train-only ablation",
+  "nei_recheck": "maximise (fixes - harms) over tau in 0.5/0.7/0.9/0.95/0.98 subject to fixes > harms; if none qualifies the rule is dropped and B1/B2 are the polarity-only variants"
+ },
+ "nei_recheck_decision": {
+  "kept": true,
+  "tuning": {
+   "tau": 0.5,
+   "table": {
+    "0.5": {
+     "flagged": 23,
+     "fixed": 2,
+     "harmed": 0,
+     "net": 2
+    },
+    "0.7": {
+     "flagged": 20,
+     "fixed": 1,
+     "harmed": 0,
+     "net": 1
+    },
+    "0.9": {
+     "flagged": 14,
+     "fixed": 1,
+     "harmed": 0,
+     "net": 1
+    },
+    "0.95": {
+     "flagged": 11,
+     "fixed": 1,
+     "harmed": 0,
+     "net": 1
+    },
+    "0.98": {
+     "flagged": 9,
+     "fixed": 1,
+     "harmed": 0,
+     "net": 1
+    }
+   },
+   "nei_verdicts": 29,
+   "false_nei": 9,
+   "correct_nei": 20,
+   "source": "verify_train_v1-explore.json",
+   "lowest_threshold_run": 0.5,
+   "split": "train"
+  }
+ },
+ "pre_declared_analysis": {
+  "primary": [
+   "B1 - B0: macro-F1 (keep policy)",
+   "B1 - B0: contradiction recall (keep policy)"
+  ],
+  "secondary_isolating_components": [
+   "N - B3 (the NEI recheck alone)",
+   "B1p - B0 and B2p - B0 (polarity checks alone)",
+   "B1 - B1p and B2 - B2p (the recheck added to each polarity check)",
+   "B1 - B2 (LLM vs NLI critic)"
+  ],
+  "method": "paired bootstrap over claims, 5000 resamples, 95% percentile intervals; the abstain policy is reported alongside. Secondary comparisons are exploratory and uncorrected.",
+  "no_changes_after_freeze": "no prompt, rule, threshold or policy changes once the dev run starts; the dev run executes once"
+ },
+ "train_evidence": {
+  "v1-low": {
+   "judge_version": "judge-v1",
+   "b0_macro_f1": 0.85292495376529,
+   "b0_contradiction_recall": 0.85
+  },
+  "v2-low": {
+   "judge_version": "judge-v2",
+   "b0_macro_f1": 0.8680770553835568,
+   "b0_contradiction_recall": 0.9
+  }
+ },
+ "train_final_result_file": "verify_train_v1-final.json",
+ "budget": {
+  "global_cap_inr": 600.0,
+  "global_cap_requests": 2000,
+  "dev_phase_cap_inr": 250,
+  "per_call_tripwire_usd": 0.02,
+  "thinking_tokens": "logged, not a stop condition"
+ },
+ "dev_arms": [
+  "B0",
+  "B3",
+  "N",
+  "B1p",
+  "B2p",
+  "B1",
+  "B2",
+  "A",
+  "oracle"
+ ],
+ "dev_run_command": "python scripts/run_verification.py --stage run --split dev --label frozen --judge-version judge-v1 --relation-version relation-v1 --thinking low --k 5 --max-attempts 2 --arms B0,B3,N,B1p,B2p,B1,B2,A,oracle --workers 6 --rpm 60 --validation-gold 188 --validation-shuffled 60 --phase dev --phase-cap-inr 250"
+}
