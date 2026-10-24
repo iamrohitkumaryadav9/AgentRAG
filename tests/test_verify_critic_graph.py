@@ -230,3 +230,18 @@ def test_the_two_directions_have_independent_thresholds():
     assert decide_relation(probs, 0.3, 0.9) is Relation.ENTAILS
     assert decide_relation({"entailment": 0.1, "neutral": 0.5, "contradiction": 0.4}, 0.9, 0.3) is Relation.CONTRADICTS
     assert decide_relation({"entailment": 0.1, "neutral": 0.5, "contradiction": 0.4}, 0.3, 0.9) is Relation.NEUTRAL
+
+def test_judge_v2_is_a_separate_version_and_v1_is_unchanged():
+    import hashlib
+
+    from agentrag.verify.prompts import JUDGE_TEMPLATES
+
+    v1, v2 = JUDGE_TEMPLATES["judge-v1"], JUDGE_TEMPLATES["judge-v2"]
+    assert v1 != v2
+    # v1's text is pinned: cached v1 responses are keyed on the rendered prompt, so changing it would orphan them
+    assert hashlib.sha256(v1.encode()).hexdigest()[:16] == "981f72d0c17adde9"
+    assert "NOT_ENOUGH_INFO" in v2 and "{claim}" in v2 and "{abstracts}" in v2 and "{feedback}" in v2
+    rendered = render_judge(CLAIM, DOCS, version="judge-v2")
+    assert "[Doc 7] Vessel walls" in rendered and "Claim: " + CLAIM in rendered
+    assert render_judge(CLAIM, DOCS, "bad citation", "judge-v2").count("found a problem: bad citation") == 1
+    assert config_fingerprint("judge-v1", k=5) != config_fingerprint("judge-v2", k=5)

@@ -43,6 +43,42 @@ Abstracts:
 Respond with JSON only.""",
 }
 
+# judge-v2 is the single revision allowed after judge-v1 scored macro-F1 0.853 on the 60 train claims with every one
+# of its 9 errors a false NOT_ENOUGH_INFO (precision 1.00 on SUPPORT and CONTRADICT). It targets that bias with
+# general guidance on how to decide, nothing specific to those claims. v1 above is unchanged, so cached v1 results
+# stay valid.
+JUDGE_TEMPLATES["judge-v2"] = """You are verifying a scientific claim against retrieved paper abstracts.
+
+Choose exactly one verdict:
+- SUPPORT: the abstracts report a finding that agrees with the claim.
+- CONTRADICT: the abstracts report a finding that disagrees with the claim.
+- NOT_ENOUGH_INFO: the abstracts report no finding about the relationship the claim asserts.
+
+How to decide:
+- Claims are usually short paraphrases or direct consequences of findings in a paper, rarely word for word. \
+Look for a sentence that reports a result about the same entities and the same relationship (the same intervention, \
+exposure or factor, and the same outcome).
+- If you find one, choose SUPPORT or CONTRADICT by whether that result agrees or disagrees with the claim, even \
+when the wording, the level of detail or the population differs somewhat, or when one short, obvious step connects \
+them. For example, a finding that X reduces Y contradicts "X has no effect on Y", and a finding that X protects \
+against Y supports "X prevents Y".
+- Choose NOT_ENOUGH_INFO only when you cannot point to such a sentence: the abstracts discuss the entities \
+separately, or a different outcome or intervention, or are silent on the relationship. Do not stretch: if linking the \
+evidence to the claim would take several assumptions, answer NOT_ENOUGH_INFO.
+- Judge only from the text below, never from outside knowledge.
+- Direction and negation matter: increase versus decrease, more versus less, causes versus does not cause. \
+A claim and its mirror image can have opposite verdicts.
+- Cite the sentences your verdict rests on as {{"doc_id": "<id>", "sentence_ids": [<numbers shown in brackets>]}}. \
+Cite nothing for NOT_ENOUGH_INFO.
+- Give a one-sentence rationale.
+
+Claim: {claim}
+
+Abstracts:
+{abstracts}
+{feedback}
+Respond with JSON only."""
+
 FEEDBACK_TEMPLATE = (
     "\nA reviewer checked your previous answer and found a problem: {problem}\n"
     "Re-read the claim and the cited sentences, then answer again.\n"

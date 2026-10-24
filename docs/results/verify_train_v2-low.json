@@ -1,0 +1,2052 @@
+{
+ "config": {
+  "model": "gemini-3.8-flash",
+  "thinking": "low",
+  "temperature": 0.0,
+  "k": 5,
+  "max_attempts": 2,
+  "judge_version": "judge-v2",
+  "relation_version": "relation-v1",
+  "nli_model": "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli",
+  "nli_taus": [
+   0.2,
+   0.6
+  ],
+  "nli_only_tau": 0.9,
+  "failure_policy_reported": [
+   "keep",
+   "abstain"
+  ],
+  "primary_failure_policy": "keep",
+  "retrieval": "hybrid-bge (BM25 + bge-small-en-v1.5, RRF k=60, depth 100)",
+  "fingerprint": "bb15775ee539a1d0"
+ },
+ "retrieval": {
+  "evidence_doc_hit@1": 0.775,
+  "evidence_doc_hit@5": 0.95
+ },
+ "claims": [
+  "11",
+  "60",
+  "96",
+  "116",
+  "149",
+  "159",
+  "259",
+  "286",
+  "287",
+  "304",
+  "313",
+  "332",
+  "349",
+  "351",
+  "366",
+  "416",
+  "418",
+  "422",
+  "423",
+  "455",
+  "483",
+  "499",
+  "506",
+  "542",
+  "584",
+  "633",
+  "648",
+  "662",
+  "669",
+  "671",
+  "747",
+  "774",
+  "798",
+  "799",
+  "807",
+  "815",
+  "854",
+  "881",
+  "894",
+  "927",
+  "928",
+  "930",
+  "955",
+  "992",
+  "1016",
+  "1050",
+  "1098",
+  "1103",
+  "1111",
+  "1134",
+  "1166",
+  "1170",
+  "1208",
+  "1229",
+  "1231",
+  "1255",
+  "1265",
+  "1349",
+  "1350",
+  "1398"
+ ],
+ "arms": {
+  "B0": {
+   "metrics": {
+    "initial": {
+     "n": 60,
+     "macro_f1": 0.8680770553835568,
+     "accuracy": 0.8666666666666667,
+     "kappa": 0.8,
+     "per_class": {
+      "SUPPORT": {
+       "precision": 1.0,
+       "recall": 0.7,
+       "f1": 0.8235294117647058,
+       "support": 20
+      },
+      "CONTRADICT": {
+       "precision": 1.0,
+       "recall": 0.9,
+       "f1": 0.9473684210526316,
+       "support": 20
+      },
+      "NOT_ENOUGH_INFO": {
+       "precision": 0.7142857142857143,
+       "recall": 1.0,
+       "f1": 0.8333333333333333,
+       "support": 20
+      }
+     },
+     "confusion": {
+      "SUPPORT": {
+       "SUPPORT": 14,
+       "CONTRADICT": 0,
+       "NOT_ENOUGH_INFO": 6
+      },
+      "CONTRADICT": {
+       "SUPPORT": 0,
+       "CONTRADICT": 18,
+       "NOT_ENOUGH_INFO": 2
+      },
+      "NOT_ENOUGH_INFO": {
+       "SUPPORT": 0,
+       "CONTRADICT": 0,
+       "NOT_ENOUGH_INFO": 20
+      }
+     }
+    },
+    "final_keep": {
+     "n": 60,
+     "macro_f1": 0.8680770553835568,
+     "accuracy": 0.8666666666666667,
+     "kappa": 0.8,
+     "per_class": {
+      "SUPPORT": {
+       "precision": 1.0,
+       "recall": 0.7,
+       "f1": 0.8235294117647058,
+       "support": 20
+      },
+      "CONTRADICT": {
+       "precision": 1.0,
+       "recall": 0.9,
+       "f1": 0.9473684210526316,
+       "support": 20
+      },
+      "NOT_ENOUGH_INFO": {
+       "precision": 0.7142857142857143,
+       "recall": 1.0,
+       "f1": 0.8333333333333333,
+       "support": 20
+      }
+     },
+     "confusion": {
+      "SUPPORT": {
+       "SUPPORT": 14,
+       "CONTRADICT": 0,
+       "NOT_ENOUGH_INFO": 6
+      },
+      "CONTRADICT": {
+       "SUPPORT": 0,
+       "CONTRADICT": 18,
+       "NOT_ENOUGH_INFO": 2
+      },
+      "NOT_ENOUGH_INFO": {
+       "SUPPORT": 0,
+       "CONTRADICT": 0,
+       "NOT_ENOUGH_INFO": 20
+      }
+     }
+    },
+    "final_abstain": {
+     "n": 60,
+     "macro_f1": 0.8680770553835568,
+     "accuracy": 0.8666666666666667,
+     "kappa": 0.8,
+     "per_class": {
+      "SUPPORT": {
+       "precision": 1.0,
+       "recall": 0.7,
+       "f1": 0.8235294117647058,
+       "support": 20
+      },
+      "CONTRADICT": {
+       "precision": 1.0,
+       "recall": 0.9,
+       "f1": 0.9473684210526316,
+       "support": 20
+      },
+      "NOT_ENOUGH_INFO": {
+       "precision": 0.7142857142857143,
+       "recall": 1.0,
+       "f1": 0.8333333333333333,
+       "support": 20
+      }
+     },
+     "confusion": {
+      "SUPPORT": {
+       "SUPPORT": 14,
+       "CONTRADICT": 0,
+       "NOT_ENOUGH_INFO": 6
+      },
+      "CONTRADICT": {
+       "SUPPORT": 0,
+       "CONTRADICT": 18,
+       "NOT_ENOUGH_INFO": 2
+      },
+      "NOT_ENOUGH_INFO": {
+       "SUPPORT": 0,
+       "CONTRADICT": 0,
+       "NOT_ENOUGH_INFO": 20
+      }
+     }
+    },
+    "retry_keep": {
+     "claims": 60,
+     "flagged": 0,
+     "flag_rate": 0.0,
+     "initial_wrong": 8,
+     "critic_precision": null,
+     "critic_recall": 0.0,
+     "fixed": 0,
+     "harmed": 0,
+     "fix_rate": null,
+     "harm_rate": null,
+     "net_fixed_per_100_claims": 0.0
+    },
+    "retry_abstain": {
+     "claims": 60,
+     "flagged": 0,
+     "flag_rate": 0.0,
+     "initial_wrong": 8,
+     "critic_precision": null,
+     "critic_recall": 0.0,
+     "fixed": 0,
+     "harmed": 0,
+     "fix_rate": null,
+     "harm_rate": null,
+     "net_fixed_per_100_claims": 0.0
+    },
+    "faithfulness_initial": {
+     "faithful": 0,
+     "judged": 0,
+     "rate": null
+    },
+    "faithfulness_final": {
+     "faithful": 0,
+     "judged": 0,
+     "rate": null
+    },
+    "evidence": {
+     "precision": 0.6949152542372882,
+     "recall": 0.5256410256410257,
+     "f1": 0.5985401459854015,
+     "claims": 40
+    },
+    "first_attempt_status": {
+     "ok": 60
+    },
+    "final_critic_rejections": 0,
+    "usage": {
+     "claims": 60,
+     "api_calls_total": 0,
+     "model_calls_total": 60,
+     "model_calls_per_claim": 1.0,
+     "prompt_tokens_per_claim": 2333.2166666666667,
+     "output_tokens_per_claim": 81.68333333333334,
+     "thought_tokens_per_claim": 3.65,
+     "paid_equivalent_usd_total": 0.12419475,
+     "paid_equivalent_usd_per_claim": 0.0020699125000000003,
+     "api_latency_ms_per_claim_mean": 2522.6283333333336,
+     "api_latency_ms_per_claim_p50": 2440.4,
+     "api_latency_ms_per_claim_p95": 3259.1,
+     "attempts_mean": 1.0
+    }
+   },
+   "claims": [
+    {
+     "id": "11",
+     "gold": "NOT_ENOUGH_INFO",
+     "claim": "4-PBA treatment raises endoplasmic reticulum stress in response to general endoplasmic reticulum stress markers.",
+     "retrieved": [
+      "25510546",
+      "32587939",
+      "7482674",
+      "13958154",
+      "600437"
+     ],
+     "initial": "NOT_ENOUGH_INFO",
+     "final_keep": "NOT_ENOUGH_INFO",
+     "final_abstain": "NOT_ENOUGH_INFO",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "NOT_ENOUGH_INFO",
+       "rationale": "None of the retrieved abstracts mention 4-PBA or its effect on endoplasmic reticulum stress.",
+       "citations": [],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "60",
+     "gold": "CONTRADICT",
+     "claim": "ART has no effect on the infectiveness of HIV-positive people.",
+     "retrieved": [
+      "13899137",
+      "374902",
+      "39984099",
+      "13071728",
+      "46353045"
+     ],
+     "initial": "CONTRADICT",
+     "final_keep": "CONTRADICT",
+     "final_abstain": "CONTRADICT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "CONTRADICT",
+       "rationale": "Mathematical models demonstrate that expanding antiretroviral therapy (ART) substantially reduces HIV incidence and new infections by decreasing transmission, directly contradicting the claim that ART has no effect on infectiveness.",
+       "citations": [
+        {
+         "doc_id": "13899137",
+         "sentence_ids": [
+          5,
+          11
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "96",
+     "gold": "NOT_ENOUGH_INFO",
+     "claim": "Algerian physicians constitue the largest component of sub-Saharan Africa-trained physicians in the United States.",
+     "retrieved": [
+      "14500725",
+      "3662510",
+      "27711043",
+      "116556376",
+      "6085365"
+     ],
+     "initial": "NOT_ENOUGH_INFO",
+     "final_keep": "NOT_ENOUGH_INFO",
+     "final_abstain": "NOT_ENOUGH_INFO",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "NOT_ENOUGH_INFO",
+       "rationale": "None of the retrieved abstracts mention Algerian physicians or provide data showing whether they constitute the largest component of sub-Saharan Africa-trained physicians in the United States.",
+       "citations": [],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "116",
+     "gold": "SUPPORT",
+     "claim": "Anthrax spores remain deadly until affected areas are decontaminated.",
+     "retrieved": [
+      "33872649",
+      "13966946",
+      "7655029",
+      "9977329",
+      "21050357"
+     ],
+     "initial": "NOT_ENOUGH_INFO",
+     "final_keep": "NOT_ENOUGH_INFO",
+     "final_abstain": "NOT_ENOUGH_INFO",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "NOT_ENOUGH_INFO",
+       "rationale": "While one abstract shows that viable Bacillus anthracis spores can reaerosolize in contaminated environments, none of the provided abstracts evaluate whether the spores remain deadly until decontamination occurs.",
+       "citations": [],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "149",
+     "gold": "CONTRADICT",
+     "claim": "Autophagy deficiency in the liver increases vulnerability to insulin resistance.",
+     "retrieved": [
+      "6227220",
+      "31001322",
+      "56528795",
+      "10463997",
+      "39558597"
+     ],
+     "initial": "CONTRADICT",
+     "final_keep": "CONTRADICT",
+     "final_abstain": "CONTRADICT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "CONTRADICT",
+       "rationale": "Doc 6227220 states that mice with autophagy deficiency in the liver showed resistance to diet-induced obesity and amelioration of insulin resistance, directly contradicting the claim that it increases vulnerability to insulin resistance.",
+       "citations": [
+        {
+         "doc_id": "6227220",
+         "sentence_ids": [
+          5
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "159",
+     "gold": "SUPPORT",
+     "claim": "BRCA 1 mutation carriers' risk of breast and ovarian cancer depends on where the mutation is located.",
+     "retrieved": [
+      "2015126",
+      "9394119",
+      "3285322",
+      "22975806",
+      "17088791"
+     ],
+     "initial": "SUPPORT",
+     "final_keep": "SUPPORT",
+     "final_abstain": "SUPPORT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "SUPPORT",
+       "rationale": "The study identified distinct breast and ovarian cancer cluster regions across BRCA1, concluding that breast and ovarian cancer risks vary by the type and location of the mutation.",
+       "citations": [
+        {
+         "doc_id": "9394119",
+         "sentence_ids": [
+          11,
+          12,
+          17
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "259",
+     "gold": "NOT_ENOUGH_INFO",
+     "claim": "Chronic HIV stimulation of B cells leads to the premature exhaustion of B cells.",
+     "retrieved": [
+      "20261352",
+      "35987381",
+      "44562058",
+      "3090454",
+      "301866"
+     ],
+     "initial": "NOT_ENOUGH_INFO",
+     "final_keep": "NOT_ENOUGH_INFO",
+     "final_abstain": "NOT_ENOUGH_INFO",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "NOT_ENOUGH_INFO",
+       "rationale": "The provided abstracts discuss B-cell exhaustion and dysfunction in HIV, but none state that chronic HIV stimulation directly leads to the premature exhaustion of B cells.",
+       "citations": [],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "286",
+     "gold": "SUPPORT",
+     "claim": "Converting apoE4 to apoE3 by gene editing prevents the pathology associated with apoE4 in human iPSCderived neurons.",
+     "retrieved": [
+      "4709641",
+      "4459491",
+      "13296399",
+      "47018050",
+      "36474"
+     ],
+     "initial": "SUPPORT",
+     "final_keep": "SUPPORT",
+     "final_abstain": "SUPPORT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "SUPPORT",
+       "rationale": "Converting ApoE4 to ApoE3 via gene editing rescued the pathological phenotypes (such as tau phosphorylation, increased amyloid-\u03b2 production, and GABAergic neuron degeneration) seen in ApoE4-expressing human iPSC-derived neurons.",
+       "citations": [
+        {
+         "doc_id": "4709641",
+         "sentence_ids": [
+          1,
+          3
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "287",
+     "gold": "CONTRADICT",
+     "claim": "Converting apoE4 to apoE3 by gene editing worsens the pathology associated with apoE4 in human iPSCderived neurons.",
+     "retrieved": [
+      "4709641",
+      "4459491",
+      "13296399",
+      "47018050",
+      "7029990"
+     ],
+     "initial": "CONTRADICT",
+     "final_keep": "CONTRADICT",
+     "final_abstain": "CONTRADICT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "CONTRADICT",
+       "rationale": "Converting ApoE4 to ApoE3 by gene editing rescued the pathological phenotypes in human iPSC-derived neurons rather than worsening them.",
+       "citations": [
+        {
+         "doc_id": "4709641",
+         "sentence_ids": [
+          3
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "304",
+     "gold": "NOT_ENOUGH_INFO",
+     "claim": "DMS3 protein enables Pol V transcription in vivo.",
+     "retrieved": [
+      "14797520",
+      "32275758",
+      "25175223",
+      "34559336",
+      "7416873"
+     ],
+     "initial": "NOT_ENOUGH_INFO",
+     "final_keep": "NOT_ENOUGH_INFO",
+     "final_abstain": "NOT_ENOUGH_INFO",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "NOT_ENOUGH_INFO",
+       "rationale": "None of the retrieved abstracts mention the DMS3 protein or its role in Pol V transcription.",
+       "citations": [],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "313",
+     "gold": "NOT_ENOUGH_INFO",
+     "claim": "De novo assembly of sequence data has shorter contigs than unassembled sequence data.",
+     "retrieved": [
+      "14464451",
+      "32770503",
+      "15966318",
+      "17447653",
+      "14185503"
+     ],
+     "initial": "NOT_ENOUGH_INFO",
+     "final_keep": "NOT_ENOUGH_INFO",
+     "final_abstain": "NOT_ENOUGH_INFO",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "NOT_ENOUGH_INFO",
+       "rationale": "None of the retrieved abstracts compare the contig lengths of de novo assembled sequence data against unassembled sequence data.",
+       "citations": [],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "332",
+     "gold": "CONTRADICT",
+     "claim": "Depletion of T-helper 17 (Th17) cells during simian immunodeficiency virus (SIV) infection decreases dissemination of Salmonella Typhimurium from the gut.",
+     "retrieved": [
+      "29023309",
+      "8300657",
+      "1071991",
+      "35651106",
+      "44737533"
+     ],
+     "initial": "CONTRADICT",
+     "final_keep": "CONTRADICT",
+     "final_abstain": "CONTRADICT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "CONTRADICT",
+       "rationale": "Depletion of Th17 cells during SIV infection leads to increased bacterial dissemination of Salmonella Typhimurium from the gut, contradicting the claim that it decreases dissemination.",
+       "citations": [
+        {
+         "doc_id": "29023309",
+         "sentence_ids": [
+          1,
+          3
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "349",
+     "gold": "CONTRADICT",
+     "claim": "Diminished ovarian reserve is a reliable indicator of infertility in a non-infertile population.",
+     "retrieved": [
+      "13497630",
+      "34198460",
+      "42150015",
+      "8642784",
+      "28598374"
+     ],
+     "initial": "CONTRADICT",
+     "final_keep": "CONTRADICT",
+     "final_abstain": "CONTRADICT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "CONTRADICT",
+       "rationale": "Doc 13497630 demonstrates that among women without a history of infertility, biomarkers indicating diminished ovarian reserve were not associated with reduced fertility, contradicting the claim that diminished ovarian reserve is a reliable indicator of infertility in this population.",
+       "citations": [
+        {
+         "doc_id": "13497630",
+         "sentence_ids": [
+          11,
+          12
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "351",
+     "gold": "NOT_ENOUGH_INFO",
+     "claim": "Distant CREs are important for transcriptional regulation.",
+     "retrieved": [
+      "21622715",
+      "32324430",
+      "20028729",
+      "8494570",
+      "18276599"
+     ],
+     "initial": "NOT_ENOUGH_INFO",
+     "final_keep": "NOT_ENOUGH_INFO",
+     "final_abstain": "NOT_ENOUGH_INFO",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "NOT_ENOUGH_INFO",
+       "rationale": "None of the provided abstracts discuss distant cis-regulatory elements (or distant CREs/cAMP-responsive elements) and their specific role in transcriptional regulation.",
+       "citations": [],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "366",
+     "gold": "SUPPORT",
+     "claim": "ERAP1 SNPs are epistatic to HLA alleles for ankylosing spondylitis.",
+     "retrieved": [
+      "13956305",
+      "1265945",
+      "15716328",
+      "11884292",
+      "97884"
+     ],
+     "initial": "SUPPORT",
+     "final_keep": "SUPPORT",
+     "final_abstain": "SUPPORT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "SUPPORT",
+       "rationale": "Doc 13956305 reports that major histocompatibility complex associations in ankylosing spondylitis involve epistasis with ERAP1, noting that the ERAP1 SNP rs30187 association interacts with HLA-B alleles such as HLA-B*27 and HLA-B*40:01.",
+       "citations": [
+        {
+         "doc_id": "13956305",
+         "sentence_ids": [
+          5
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "416",
+     "gold": "SUPPORT",
+     "claim": "Female carriers of the Apolipoprotein E4 (APOE4) allele have longer lifetime exposure to estrogen due to an increased reproductive period.",
+     "retrieved": [
+      "18852643",
+      "6309659",
+      "20937018",
+      "12443371",
+      "30351165"
+     ],
+     "initial": "NOT_ENOUGH_INFO",
+     "final_keep": "NOT_ENOUGH_INFO",
+     "final_abstain": "NOT_ENOUGH_INFO",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "NOT_ENOUGH_INFO",
+       "rationale": "None of the provided abstracts evaluate whether female carriers of the APOE4 allele have a longer reproductive period or longer lifetime exposure to estrogen.",
+       "citations": [],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "418",
+     "gold": "NOT_ENOUGH_INFO",
+     "claim": "Fibroblast Growth Factor is a ligand which signals through receptor tyrosine kinases.",
+     "retrieved": [
+      "16494316",
+      "5821617",
+      "24974080",
+      "23397658",
+      "21931005"
+     ],
+     "initial": "NOT_ENOUGH_INFO",
+     "final_keep": "NOT_ENOUGH_INFO",
+     "final_abstain": "NOT_ENOUGH_INFO",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "NOT_ENOUGH_INFO",
+       "rationale": "None of the retrieved abstracts discuss Fibroblast Growth Factor signaling specifically through receptor tyrosine kinases.",
+       "citations": [],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "422",
+     "gold": "NOT_ENOUGH_INFO",
+     "claim": "Flexible molecules experience less steric hindrance in the tumor microenviroment than rigid molecules.",
+     "retrieved": [
+      "502797",
+      "39728826",
+      "14768471",
+      "4429118",
+      "43224840"
+     ],
+     "initial": "NOT_ENOUGH_INFO",
+     "final_keep": "NOT_ENOUGH_INFO",
+     "final_abstain": "NOT_ENOUGH_INFO",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "NOT_ENOUGH_INFO",
+       "rationale": "None of the retrieved abstracts discuss the steric hindrance or transport of flexible versus rigid molecules in the tumor microenvironment.",
+       "citations": [],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "423",
+     "gold": "NOT_ENOUGH_INFO",
+     "claim": "Folate and vitamin B12 levels influence the association between homocysteine and preeclampsia.",
+     "retrieved": [
+      "37424881",
+      "42441846",
+      "19278208",
+      "8595678",
+      "33409100"
+     ],
+     "initial": "NOT_ENOUGH_INFO",
+     "final_keep": "NOT_ENOUGH_INFO",
+     "final_abstain": "NOT_ENOUGH_INFO",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "NOT_ENOUGH_INFO",
+       "rationale": "None of the retrieved abstracts examine whether folate and vitamin B12 levels modify or influence the association between homocysteine and preeclampsia.",
+       "citations": [],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "455",
+     "gold": "SUPPORT",
+     "claim": "Genes involved in pre-mRNA splicing have a significant impact on genome stability.",
+     "retrieved": [
+      "13384318",
+      "4162857",
+      "20585600",
+      "29828242",
+      "12643937"
+     ],
+     "initial": "SUPPORT",
+     "final_keep": "SUPPORT",
+     "final_abstain": "SUPPORT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "SUPPORT",
+       "rationale": "A genome-wide siRNA screen identified that downregulating mRNA-processing factors causes elevated DNA damage, demonstrating their widespread role in maintaining genome stability.",
+       "citations": [
+        {
+         "doc_id": "12643937",
+         "sentence_ids": [
+          2,
+          3
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "483",
+     "gold": "SUPPORT",
+     "claim": "H.pylori-mediated gastric cancer occurs due to the accumulation of mutations in host epithelial cells.",
+     "retrieved": [
+      "24705390",
+      "22703082",
+      "29367554",
+      "39550665",
+      "8654183"
+     ],
+     "initial": "SUPPORT",
+     "final_keep": "SUPPORT",
+     "final_abstain": "SUPPORT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "SUPPORT",
+       "rationale": "Doc 22703082 shows that H. pylori infection causes upregulation of activation-induced cytidine deaminase, leading to the accumulation of nucleotide alterations (mutations) in gastric cells during H. pylori-associated gastric carcinogenesis.",
+       "citations": [
+        {
+         "doc_id": "22703082",
+         "sentence_ids": [
+          2,
+          3
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "499",
+     "gold": "CONTRADICT",
+     "claim": "HbA1c consistently overestimates glycemic control in black individuals with Sickle cell trait (SCT).",
+     "retrieved": [
+      "26064662",
+      "12662435",
+      "23206239",
+      "5262240",
+      "1538080"
+     ],
+     "initial": "CONTRADICT",
+     "final_keep": "CONTRADICT",
+     "final_abstain": "CONTRADICT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "CONTRADICT",
+       "rationale": "Rather than overestimating glycemic control, findings show that African Americans with sickle cell trait have systematically lower HbA1c levels for a given glucose concentration, indicating that HbA1c systematically underestimates past glycemia.",
+       "citations": [
+        {
+         "doc_id": "26064662",
+         "sentence_ids": [
+          14,
+          15
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "506",
+     "gold": "SUPPORT",
+     "claim": "Helminths interfere with immune system control of coinfections by microbial pathogens 16.",
+     "retrieved": [
+      "13966946",
+      "25878014",
+      "3001685",
+      "21439293",
+      "42693833"
+     ],
+     "initial": "NOT_ENOUGH_INFO",
+     "final_keep": "NOT_ENOUGH_INFO",
+     "final_abstain": "NOT_ENOUGH_INFO",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "NOT_ENOUGH_INFO",
+       "rationale": "None of the retrieved abstracts discuss the effect of helminths on the immune system's control of coinfections by microbial pathogens.",
+       "citations": [],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "542",
+     "gold": "CONTRADICT",
+     "claim": "IFI16 impedes STING phosphorylation and translocation, resulting in reduced activation of STING.",
+     "retrieved": [
+      "19688024",
+      "41337677",
+      "7968532",
+      "1049501",
+      "40044800"
+     ],
+     "initial": "CONTRADICT",
+     "final_keep": "CONTRADICT",
+     "final_abstain": "CONTRADICT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "CONTRADICT",
+       "rationale": "Doc 19688024 states that IFI16 is required for cGAMP-induced activation of STING and interacts with STING to promote, rather than impede, STING phosphorylation and translocation.",
+       "citations": [
+        {
+         "doc_id": "19688024",
+         "sentence_ids": [
+          3
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "584",
+     "gold": "SUPPORT",
+     "claim": "In rhesus macaques, daily subcutaneous injections of tenofovir protects against rectally transmitted simian-human immunodeficiency virus.",
+     "retrieved": [
+      "708425",
+      "14260013",
+      "43378932",
+      "29023309",
+      "31560225"
+     ],
+     "initial": "NOT_ENOUGH_INFO",
+     "final_keep": "NOT_ENOUGH_INFO",
+     "final_abstain": "NOT_ENOUGH_INFO",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "NOT_ENOUGH_INFO",
+       "rationale": "None of the provided abstracts evaluate daily subcutaneous injections of tenofovir alone against rectally transmitted SHIV; Doc 14260013 tested subcutaneous tenofovir only in combination with emtricitabine.",
+       "citations": [],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "633",
+     "gold": "CONTRADICT",
+     "claim": "Inhibiting focal adhesion formation increases the rate at which cells convert mechanical strain into inflammation and fibrosis.",
+     "retrieved": [
+      "5172048",
+      "9507605",
+      "28195565",
+      "16057926",
+      "32532238"
+     ],
+     "initial": "CONTRADICT",
+     "final_keep": "CONTRADICT",
+     "final_abstain": "CONTRADICT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "CONTRADICT",
+       "rationale": "Doc 5172048 demonstrates that knockout or small-molecule inhibition of focal adhesion kinase (FAK) decreases inflammation, reduces scar formation, and uncouples mechanical force from fibrosis, directly contradicting the claim that inhibition increases these processes.",
+       "citations": [
+        {
+         "doc_id": "5172048",
+         "sentence_ids": [
+          3,
+          6,
+          7
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "648",
+     "gold": "SUPPORT",
+     "claim": "Integrated care is successful at tackling multiple comorbidities.",
+     "retrieved": [
+      "15041758",
+      "19945096",
+      "6517267",
+      "32777637",
+      "17693849"
+     ],
+     "initial": "SUPPORT",
+     "final_keep": "SUPPORT",
+     "final_abstain": "SUPPORT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "SUPPORT",
+       "rationale": "A randomized controlled trial demonstrated that integrated care for multiple comorbidities (chronic physical diseases and comorbid depression) successfully improved global quality of life and reduced disability.",
+       "citations": [
+        {
+         "doc_id": "15041758",
+         "sentence_ids": [
+          6,
+          8
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "662",
+     "gold": "CONTRADICT",
+     "claim": "JMJD6 slows the hydroxylation of C-terminal lysine",
+     "retrieved": [
+      "37204802",
+      "27134527",
+      "2831620",
+      "40901687",
+      "8646760"
+     ],
+     "initial": "NOT_ENOUGH_INFO",
+     "final_keep": "NOT_ENOUGH_INFO",
+     "final_abstain": "NOT_ENOUGH_INFO",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "NOT_ENOUGH_INFO",
+       "rationale": "While Document 37204802 states that JMJD6 catalyzes p53 hydroxylation at lysine 382, none of the retrieved abstracts mention whether JMJD6 slows the hydroxylation of C-terminal lysine.",
+       "citations": [],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "669",
+     "gold": "CONTRADICT",
+     "claim": "Klf4 is not required for proper myeloid cell differentiation.",
+     "retrieved": [
+      "25148216",
+      "6493422",
+      "18489989",
+      "22150633",
+      "6446747"
+     ],
+     "initial": "CONTRADICT",
+     "final_keep": "CONTRADICT",
+     "final_abstain": "CONTRADICT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "CONTRADICT",
+       "rationale": "Doc 25148216 shows that KLF4 is essential for the differentiation of inflammatory monocytes and is a key regulator of monocytic differentiation, contradicting the claim that it is not required for proper myeloid cell differentiation.",
+       "citations": [
+        {
+         "doc_id": "25148216",
+         "sentence_ids": [
+          4,
+          6
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "671",
+     "gold": "SUPPORT",
+     "claim": "Knockout proximal tubule-specific deletion of the BMP receptor Alk3 causes fibrosis.",
+     "retrieved": [
+      "5573975",
+      "25928548",
+      "3619931",
+      "5172048",
+      "40349336"
+     ],
+     "initial": "SUPPORT",
+     "final_keep": "SUPPORT",
+     "final_abstain": "SUPPORT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "SUPPORT",
+       "rationale": "The study demonstrates that deletion of the BMP receptor Alk3 in the tubular epithelium leads to enhanced TGF-\u03b21-Smad3 signaling, epithelial damage, and fibrosis.",
+       "citations": [
+        {
+         "doc_id": "5573975",
+         "sentence_ids": [
+          2
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "747",
+     "gold": "CONTRADICT",
+     "claim": "MafA ubiquitination decreases the recruitment of coavtivator P/CAF by MafA.",
+     "retrieved": [
+      "11291348",
+      "25817686",
+      "12225214",
+      "4389394",
+      "3559136"
+     ],
+     "initial": "NOT_ENOUGH_INFO",
+     "final_keep": "NOT_ENOUGH_INFO",
+     "final_abstain": "NOT_ENOUGH_INFO",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "NOT_ENOUGH_INFO",
+       "rationale": "Doc 11291348 shows that P/CAF protects MafA from ubiquitination and degradation, but does not provide evidence that MafA ubiquitination itself decreases recruitment of P/CAF.",
+       "citations": [],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "774",
+     "gold": "NOT_ENOUGH_INFO",
+     "claim": "Mice defective for deoxyribonucleic acid (DNA) polymerase I (polI) fail to reveal increased sensitivity to ionizing radiation (IR).",
+     "retrieved": [
+      "11569583",
+      "27635177",
+      "31293581",
+      "12552297",
+      "43014661"
+     ],
+     "initial": "NOT_ENOUGH_INFO",
+     "final_keep": "NOT_ENOUGH_INFO",
+     "final_abstain": "NOT_ENOUGH_INFO",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "NOT_ENOUGH_INFO",
+       "rationale": "None of the retrieved abstracts discuss mice defective for DNA polymerase I (polI) or their sensitivity to ionizing radiation.",
+       "citations": [],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "798",
+     "gold": "CONTRADICT",
+     "claim": "Mitochondria play a trivial role in calcium homeostasis.",
+     "retrieved": [
+      "5094468",
+      "8551160",
+      "14835068",
+      "25183830",
+      "19205437"
+     ],
+     "initial": "CONTRADICT",
+     "final_keep": "CONTRADICT",
+     "final_abstain": "CONTRADICT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "CONTRADICT",
+       "rationale": "Mitochondrial calcium accumulation is described as a biological process of utmost physiological relevance that controls intracellular calcium signalling and buffers cytosolic calcium levels, directly contradicting the claim that it plays a trivial role.",
+       "citations": [
+        {
+         "doc_id": "5094468",
+         "sentence_ids": [
+          0,
+          1
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "799",
+     "gold": "NOT_ENOUGH_INFO",
+     "claim": "Moderate consumption of candy and chocolate reduces the risk of cardiovascular disease (CVD).",
+     "retrieved": [
+      "5293024",
+      "8780599",
+      "17914395",
+      "5939172",
+      "43629704"
+     ],
+     "initial": "NOT_ENOUGH_INFO",
+     "final_keep": "NOT_ENOUGH_INFO",
+     "final_abstain": "NOT_ENOUGH_INFO",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "NOT_ENOUGH_INFO",
+       "rationale": "None of the retrieved abstracts report findings evaluating the effect of moderate candy and chocolate consumption on cardiovascular disease risk.",
+       "citations": [],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "807",
+     "gold": "SUPPORT",
+     "claim": "Most termination events in Okazaki fragments are dictated by initiation patterns.",
+     "retrieved": [
+      "36606083",
+      "21853444",
+      "5223817",
+      "25787749",
+      "39729277"
+     ],
+     "initial": "NOT_ENOUGH_INFO",
+     "final_keep": "NOT_ENOUGH_INFO",
+     "final_abstain": "NOT_ENOUGH_INFO",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "NOT_ENOUGH_INFO",
+       "rationale": "The provided abstracts discuss deep sequencing of Okazaki fragments and replication termination in general, but do not state that most termination events in Okazaki fragments are dictated by initiation patterns.",
+       "citations": [],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "815",
+     "gold": "SUPPORT",
+     "claim": "Mutations in RIM1 decrease levels of IME1 RNA.",
+     "retrieved": [
+      "8148304",
+      "23604601",
+      "711256",
+      "19822046",
+      "12652963"
+     ],
+     "initial": "SUPPORT",
+     "final_keep": "SUPPORT",
+     "final_abstain": "SUPPORT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "SUPPORT",
+       "rationale": "Doc 8148304 explicitly states that rim1 mutations cause reduced expression of IME1.",
+       "citations": [
+        {
+         "doc_id": "8148304",
+         "sentence_ids": [
+          1
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "854",
+     "gold": "SUPPORT",
+     "claim": "Nonhypertensive people who are 55 years old have a 90% chance of developing hypertension during their lifetime.",
+     "retrieved": [
+      "12206390",
+      "4506414",
+      "31889025",
+      "5151024",
+      "54490092"
+     ],
+     "initial": "SUPPORT",
+     "final_keep": "SUPPORT",
+     "final_abstain": "SUPPORT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "SUPPORT",
+       "rationale": "In a cohort of participants free of hypertension at baseline, the residual lifetime risk for developing hypertension was found to be 90% in 55-year-old participants.",
+       "citations": [
+        {
+         "doc_id": "12206390",
+         "sentence_ids": [
+          3,
+          5
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "881",
+     "gold": "CONTRADICT",
+     "claim": "Omnivores produce less trimethylamine N-oxide from dietary I-carnitine than vegans.",
+     "retrieved": [
+      "14803797",
+      "6327940",
+      "6793674",
+      "33684572",
+      "12709184"
+     ],
+     "initial": "CONTRADICT",
+     "final_keep": "CONTRADICT",
+     "final_abstain": "CONTRADICT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "CONTRADICT",
+       "rationale": "Omnivorous human subjects produced more, not less, trimethylamine-N-oxide (TMAO) than vegans or vegetarians following the ingestion of L-carnitine.",
+       "citations": [
+        {
+         "doc_id": "14803797",
+         "sentence_ids": [
+          2
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "894",
+     "gold": "NOT_ENOUGH_INFO",
+     "claim": "Osteoparthritis (OA) is characterized by degeneration of articular cartilage, joint edge, and subchondral bone hyperplasia.",
+     "retrieved": [
+      "22505710",
+      "33912748",
+      "37562370",
+      "1044552",
+      "97884"
+     ],
+     "initial": "NOT_ENOUGH_INFO",
+     "final_keep": "NOT_ENOUGH_INFO",
+     "final_abstain": "NOT_ENOUGH_INFO",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "NOT_ENOUGH_INFO",
+       "rationale": "None of the retrieved abstracts discuss the full pathological characterization described in the claim, such as joint edge and subchondral bone hyperplasia.",
+       "citations": [],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "927",
+     "gold": "CONTRADICT",
+     "claim": "Patients with common epithelial cancers are less likely to have an emergency event as their first hospital admission if they live in resource-deprived areas.",
+     "retrieved": [
+      "16390264",
+      "5641851",
+      "5372432",
+      "14021596",
+      "20610390"
+     ],
+     "initial": "CONTRADICT",
+     "final_keep": "CONTRADICT",
+     "final_abstain": "CONTRADICT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "CONTRADICT",
+       "rationale": "Patients with colorectal, breast, or lung cancers from deprived areas were found to be more likely, rather than less likely, to be admitted to the hospital as emergencies.",
+       "citations": [
+        {
+         "doc_id": "16390264",
+         "sentence_ids": [
+          5,
+          6
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "928",
+     "gold": "CONTRADICT",
+     "claim": "Patients with microcytosis and higher erythrocyte count are more vulnerable to severe malarial anaemia when infected with Plasmodium falciparum.",
+     "retrieved": [
+      "18174210",
+      "25420421",
+      "9254550",
+      "17168045",
+      "40900567"
+     ],
+     "initial": "CONTRADICT",
+     "final_keep": "CONTRADICT",
+     "final_abstain": "CONTRADICT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "CONTRADICT",
+       "rationale": "Rather than making patients more vulnerable, an increased erythrocyte count and microcytosis contribute substantially to protection against severe malarial anaemia in acute Plasmodium falciparum malaria.",
+       "citations": [
+        {
+         "doc_id": "18174210",
+         "sentence_ids": [
+          10,
+          11
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "930",
+     "gold": "CONTRADICT",
+     "claim": "Patients with panic anxiety show decreased CSF levels of hypocretin.",
+     "retrieved": [
+      "16056514",
+      "44830890",
+      "5260382",
+      "2436602",
+      "24770122"
+     ],
+     "initial": "CONTRADICT",
+     "final_keep": "CONTRADICT",
+     "final_abstain": "CONTRADICT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "CONTRADICT",
+       "rationale": "Human subjects with panic anxiety show elevated, rather than decreased, levels of orexin (hypocretin) in the cerebrospinal fluid compared to subjects without panic anxiety.",
+       "citations": [
+        {
+         "doc_id": "16056514",
+         "sentence_ids": [
+          3,
+          5
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "955",
+     "gold": "SUPPORT",
+     "claim": "Pioneer factor OCT3/4 interacts with major chromatin remodeling factors.",
+     "retrieved": [
+      "11011905",
+      "4896726",
+      "23208167",
+      "2151983",
+      "18998807"
+     ],
+     "initial": "NOT_ENOUGH_INFO",
+     "final_keep": "NOT_ENOUGH_INFO",
+     "final_abstain": "NOT_ENOUGH_INFO",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "NOT_ENOUGH_INFO",
+       "rationale": "None of the provided abstracts discuss pioneer factor OCT3/4 (Oct4) interacting with chromatin remodeling factors.",
+       "citations": [],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "992",
+     "gold": "SUPPORT",
+     "claim": "Pyridostatin deregulates G2/M progression.",
+     "retrieved": [
+      "16472469",
+      "19546104",
+      "6923961",
+      "19701340",
+      "14145440"
+     ],
+     "initial": "SUPPORT",
+     "final_keep": "SUPPORT",
+     "final_abstain": "SUPPORT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "SUPPORT",
+       "rationale": "Doc 16472469 states that treatment with pyridostatin (PDS) reduces the proliferation of HR-defective cells by inducing deregulated G2/M progression.",
+       "citations": [
+        {
+         "doc_id": "16472469",
+         "sentence_ids": [
+          4,
+          5
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "1016",
+     "gold": "NOT_ENOUGH_INFO",
+     "claim": "Rapamycin increases the concentration of triacylglycerols in fruit flies.",
+     "retrieved": [
+      "6277638",
+      "1227277",
+      "4658268",
+      "116792",
+      "2266471"
+     ],
+     "initial": "NOT_ENOUGH_INFO",
+     "final_keep": "NOT_ENOUGH_INFO",
+     "final_abstain": "NOT_ENOUGH_INFO",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "NOT_ENOUGH_INFO",
+       "rationale": "None of the retrieved abstracts discuss the effect of rapamycin on the concentration of triacylglycerols in fruit flies.",
+       "citations": [],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "1050",
+     "gold": "CONTRADICT",
+     "claim": "Risedronate increases risk of vertebral and non-vertebral fractures.",
+     "retrieved": [
+      "26000593",
+      "19878070",
+      "11246427",
+      "16812091",
+      "17482507"
+     ],
+     "initial": "CONTRADICT",
+     "final_keep": "CONTRADICT",
+     "final_abstain": "CONTRADICT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "CONTRADICT",
+       "rationale": "Treatment with risedronate was shown to decrease, rather than increase, the cumulative incidence of both vertebral fractures (by 41%) and nonvertebral fractures (by 39%).",
+       "citations": [
+        {
+         "doc_id": "19878070",
+         "sentence_ids": [
+          8,
+          10
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "1098",
+     "gold": "NOT_ENOUGH_INFO",
+     "claim": "Stacking is more stable when a purine is present in the +5 position (C1698).",
+     "retrieved": [
+      "34498325",
+      "393001",
+      "25373397",
+      "154050141",
+      "7260461"
+     ],
+     "initial": "NOT_ENOUGH_INFO",
+     "final_keep": "NOT_ENOUGH_INFO",
+     "final_abstain": "NOT_ENOUGH_INFO",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "NOT_ENOUGH_INFO",
+       "rationale": "None of the retrieved abstracts discuss base stacking stability involving a purine at position +5 (C1698).",
+       "citations": [],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "1103",
+     "gold": "CONTRADICT",
+     "claim": "Stroke patients with prior use of direct oral anticoagulants have a higher risk of in-hospital mortality than stroke patients with prior use of warfarin.",
+     "retrieved": [
+      "3898784",
+      "32328114",
+      "16760369",
+      "4910408",
+      "37619697"
+     ],
+     "initial": "CONTRADICT",
+     "final_keep": "CONTRADICT",
+     "final_abstain": "CONTRADICT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "CONTRADICT",
+       "rationale": "Patients with intracerebral hemorrhage and prior use of non-vitamin K antagonist oral anticoagulants (NOACs/DOACs) had a significantly lower risk of in-hospital mortality compared with those with prior use of warfarin.",
+       "citations": [
+        {
+         "doc_id": "3898784",
+         "sentence_ids": [
+          10,
+          13
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "1111",
+     "gold": "NOT_ENOUGH_INFO",
+     "claim": "Sudden death can occur in patients with complex ventricular arrhythmias.",
+     "retrieved": [
+      "21789744",
+      "23117378",
+      "2032877",
+      "21050357",
+      "35521287"
+     ],
+     "initial": "NOT_ENOUGH_INFO",
+     "final_keep": "NOT_ENOUGH_INFO",
+     "final_abstain": "NOT_ENOUGH_INFO",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "NOT_ENOUGH_INFO",
+       "rationale": "None of the provided abstracts evaluate or discuss the occurrence of sudden death specifically in patients with complex ventricular arrhythmias.",
+       "citations": [],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "1134",
+     "gold": "SUPPORT",
+     "claim": "TNFAIP3 is a glioblastoma tumor enhancer.",
+     "retrieved": [
+      "33370",
+      "5123516",
+      "18600579",
+      "4979184",
+      "13244602"
+     ],
+     "initial": "SUPPORT",
+     "final_keep": "SUPPORT",
+     "final_abstain": "SUPPORT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "SUPPORT",
+       "rationale": "Doc 33370 identifies A20 as TNFAIP3 and states that experimental findings suggest A20/TNFAIP3 functions as a tumor enhancer in glioma by promoting glioma stem cell survival.",
+       "citations": [
+        {
+         "doc_id": "33370",
+         "sentence_ids": [
+          2,
+          9
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "1166",
+     "gold": "NOT_ENOUGH_INFO",
+     "claim": "The H2A-H2B eviction defect is compensated for by other histone chaperone(s).",
+     "retrieved": [
+      "9451052",
+      "9889151",
+      "8411251",
+      "18038955",
+      "2817000"
+     ],
+     "initial": "NOT_ENOUGH_INFO",
+     "final_keep": "NOT_ENOUGH_INFO",
+     "final_abstain": "NOT_ENOUGH_INFO",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "NOT_ENOUGH_INFO",
+       "rationale": "None of the retrieved abstracts discuss an H2A-H2B eviction defect or whether other histone chaperones compensate for such a defect.",
+       "citations": [],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "1170",
+     "gold": "CONTRADICT",
+     "claim": "The NF-\u03baB essential modulator gene induces intestinal inflammation by promoting receptor-interacting protein (RIP) kinase 1 kinase activity-mediated epithelial cell death.",
+     "retrieved": [
+      "18956141",
+      "9614443",
+      "83308790",
+      "7046487",
+      "27403802"
+     ],
+     "initial": "CONTRADICT",
+     "final_keep": "CONTRADICT",
+     "final_abstain": "CONTRADICT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "CONTRADICT",
+       "rationale": "Doc 18956141 shows that NEMO prevents intestinal inflammation by inhibiting (rather than promoting) RIPK1 kinase activity-mediated epithelial cell death.",
+       "citations": [
+        {
+         "doc_id": "18956141",
+         "sentence_ids": [
+          4
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "1208",
+     "gold": "NOT_ENOUGH_INFO",
+     "claim": "The cytokine receptor which regulates chemotaxis and formation of lymph nodes is involved in production of myeloperoxidase in the left atrium.",
+     "retrieved": [
+      "10284593",
+      "14386505",
+      "1800734",
+      "13108582",
+      "23801039"
+     ],
+     "initial": "NOT_ENOUGH_INFO",
+     "final_keep": "NOT_ENOUGH_INFO",
+     "final_abstain": "NOT_ENOUGH_INFO",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "NOT_ENOUGH_INFO",
+       "rationale": "None of the provided abstracts evaluate a cytokine receptor that regulates chemotaxis and lymph node formation in relation to myeloperoxidase production in the left atrium.",
+       "citations": [],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "1229",
+     "gold": "SUPPORT",
+     "claim": "The microtubule-dependent delivery and secretion of matrix metalloproteases (MMPs) is partially responsible for the disassembly of adhesion sites.",
+     "retrieved": [
+      "1676568",
+      "22505710",
+      "16853734",
+      "28468276",
+      "4389252"
+     ],
+     "initial": "SUPPORT",
+     "final_keep": "SUPPORT",
+     "final_abstain": "SUPPORT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "SUPPORT",
+       "rationale": "The findings show that CLASP-mediated microtubule tethering directs vesicle transport and secretion to focal adhesions, while matrix metalloprotease inhibition slows focal adhesion disassembly, indicating that localized MMP secretion facilitates adhesion site turnover.",
+       "citations": [
+        {
+         "doc_id": "1676568",
+         "sentence_ids": [
+          4,
+          5,
+          6
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "1231",
+     "gold": "SUPPORT",
+     "claim": "The minor G allele of FOXO3 is related to less severe symptoms of Crohn's Disease.",
+     "retrieved": [
+      "13905670",
+      "4427060",
+      "2844490",
+      "1265945",
+      "5922085"
+     ],
+     "initial": "SUPPORT",
+     "final_keep": "SUPPORT",
+     "final_abstain": "SUPPORT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "SUPPORT",
+       "rationale": "The abstract reports that the minor (G) allele of a polymorphism in FOXO3A is associated with a milder course of Crohn's disease.",
+       "citations": [
+        {
+         "doc_id": "13905670",
+         "sentence_ids": [
+          3
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "1255",
+     "gold": "SUPPORT",
+     "claim": "The proliferative capacity of progenitors is regulated cell-autonomously.",
+     "retrieved": [
+      "16939583",
+      "25413327",
+      "4417177",
+      "23036207",
+      "3495456"
+     ],
+     "initial": "SUPPORT",
+     "final_keep": "SUPPORT",
+     "final_abstain": "SUPPORT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "SUPPORT",
+       "rationale": "Doc 16939583 shows that primate cortical progenitor expansion and proliferation differing among species is regulated cell-autonomously in culture, supporting the claim.",
+       "citations": [
+        {
+         "doc_id": "16939583",
+         "sentence_ids": [
+          2,
+          3,
+          4
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "1265",
+     "gold": "CONTRADICT",
+     "claim": "The risk of breast cancer among parous women decreases with placental weight of pregnancies.",
+     "retrieved": [
+      "37480103",
+      "17450673",
+      "13831842",
+      "16322674",
+      "25973484"
+     ],
+     "initial": "CONTRADICT",
+     "final_keep": "CONTRADICT",
+     "final_abstain": "CONTRADICT",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "CONTRADICT",
+       "rationale": "Placental weight is positively associated with maternal risk of breast cancer, indicating that the risk increases rather than decreases with higher placental weight.",
+       "citations": [
+        {
+         "doc_id": "37480103",
+         "sentence_ids": [
+          10,
+          12
+         ]
+        }
+       ],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "1349",
+     "gold": "NOT_ENOUGH_INFO",
+     "claim": "Upregulation of PD1 causes the downmodulation of Satb1.",
+     "retrieved": [
+      "5377642",
+      "5752492",
+      "20261352",
+      "23863551",
+      "10648422"
+     ],
+     "initial": "NOT_ENOUGH_INFO",
+     "final_keep": "NOT_ENOUGH_INFO",
+     "final_abstain": "NOT_ENOUGH_INFO",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "NOT_ENOUGH_INFO",
+       "rationale": "The provided abstracts discuss Satb1 regulating PD-1 expression, but do not state whether upregulation of PD-1 itself causes the downmodulation of Satb1.",
+       "citations": [],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "1350",
+     "gold": "NOT_ENOUGH_INFO",
+     "claim": "Upregulation of PD1 causes the upregulation of Satb1.",
+     "retrieved": [
+      "5377642",
+      "10648422",
+      "22703082",
+      "5752492",
+      "8764879"
+     ],
+     "initial": "NOT_ENOUGH_INFO",
+     "final_keep": "NOT_ENOUGH_INFO",
+     "final_abstain": "NOT_ENOUGH_INFO",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "NOT_ENOUGH_INFO",
+       "rationale": "The retrieved abstracts show that Satb1 represses PD-1 (Pdcd1) expression, but do not provide evidence about whether upregulation of PD-1 causes the upregulation of Satb1.",
+       "citations": [],
+       "critic": null
+      }
+     ]
+    },
+    {
+     "id": "1398",
+     "gold": "NOT_ENOUGH_INFO",
+     "claim": "p16INK4A degradation is encoded by CDKN2A.",
+     "retrieved": [
+      "19343151",
+      "18218379",
+      "17717391",
+      "2988714",
+      "7506409"
+     ],
+     "initial": "NOT_ENOUGH_INFO",
+     "final_keep": "NOT_ENOUGH_INFO",
+     "final_abstain": "NOT_ENOUGH_INFO",
+     "flagged": false,
+     "attempts": [
+      {
+       "status": "ok",
+       "verdict": "NOT_ENOUGH_INFO",
+       "rationale": "None of the provided abstracts mention CDKN2A or the degradation of p16INK4A.",
+       "citations": [],
+       "critic": null
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "comparisons": {},
+ "spend": {
+  "lifetime_calls": 113,
+  "lifetime_usd": 0.22287374999999998,
+  "lifetime_inr": 19.66533088235294,
+  "remaining_inr": 580.3346691176471,
+  "remaining_calls": 1887,
+  "api_requests_this_run": 0,
+  "paid_equivalent_usd_this_run": 0.0,
+  "wall_seconds": 0.1,
+  "cache_entries": 120,
+  "workers": 1
+ }
+}
