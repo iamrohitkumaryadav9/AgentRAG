@@ -173,7 +173,7 @@ def test_spend_is_charged_to_the_persistent_ledger_and_survives_a_new_client(tmp
 def test_the_hard_spend_cap_stops_before_the_request_that_would_cross_it(tmp_path):
     # a $0.005 cap leaves room for one call's worst-case reservation ($0.004) but, after a call that really cost
     # ~$0.0018, not for another reservation on top of it (0.0018 + 0.004 > 0.005)
-    budget = Budget(max_calls=100, max_inr=0.005 * 600 / 6.8)
+    budget = Budget(max_calls=100, max_inr=0.005 * 600 / 6.8, reserve_usd=0.004)
     cheap = RawResponse(GOOD, prompt_tokens=2000, output_tokens=80)
     transport = FakeTransport(cheap, cheap)
     client = _client(tmp_path, transport, budget=budget)
@@ -293,3 +293,17 @@ def test_a_bookkeeping_failure_after_a_paid_call_never_discards_the_response(tmp
     result = _gen(client, "paid for once")
     assert result.parsed.verdict is Verdict.SUPPORT
     assert _gen(client, "paid for once").from_cache  # it was cached despite the accounting failure
+
+
+def test_by_default_thinking_is_logged_not_a_stop_condition_and_the_cost_tripwire_is_two_cents(tmp_path):
+    budget = Budget()  # the study's defaults
+    assert budget.tripwire_usd == 0.02 and budget.max_thinking_tokens is None
+    # 5,000 thinking tokens on a normal prompt: ~$0.0207 would trip, so use 3,000 (~$0.0126): logged, not stopped
+    heavy = RawResponse(GOOD, prompt_tokens=2000, output_tokens=80, thought_tokens=3000)
+    client = _client(tmp_path, FakeTransport(heavy), budget=budget)
+    result = _gen(client, "heavy thinking")
+    assert result.parsed is not None and result.response.thought_tokens == 3000
+
+    over = RawResponse(GOOD, prompt_tokens=2000, output_tokens=80, thought_tokens=5000)  # ~ $0.0207
+    with pytest.raises(TripwireError, match="cost"):
+        _gen(_client(tmp_path, FakeTransport(over), budget=budget), "too expensive")

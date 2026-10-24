@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 
 from agentrag.verify.common import RelationResult, Usage
 from agentrag.verify.critic import Critic, resolve_citations
@@ -245,3 +245,12 @@ def test_judge_v2_is_a_separate_version_and_v1_is_unchanged():
     assert "[Doc 7] Vessel walls" in rendered and "Claim: " + CLAIM in rendered
     assert render_judge(CLAIM, DOCS, "bad citation", "judge-v2").count("found a problem: bad citation") == 1
     assert config_fingerprint("judge-v1", k=5) != config_fingerprint("judge-v2", k=5)
+
+
+def test_usage_adds_sums_but_takes_the_max_of_per_call_peaks():
+    a = Usage(llm_calls=1, cost_usd=0.002, max_call_usd=0.002, thought_tokens=0, max_thought_tokens=0)
+    b = Usage(llm_calls=2, cost_usd=0.009, max_call_usd=0.006, thought_tokens=900, max_thought_tokens=700,
+              thought_calls=2)
+    total = a + b
+    assert (total.llm_calls, total.cost_usd, total.thought_tokens, total.thought_calls) == (3, 0.011, 900, 2)
+    assert total.max_call_usd == 0.006 and total.max_thought_tokens == 700

@@ -175,3 +175,16 @@ def test_nei_subset_stats_isolate_the_claims_the_rule_acts_on():
     stats = _nei_subset_stats(gold, initial, flagged, final)
     assert stats["claims"] == 2 and stats["flagged"] == 2 and stats["fixed"] == 1 and stats["harmed"] == 1
     assert _nei_subset_stats(["SUPPORT"], ["SUPPORT"], [False], ["SUPPORT"]) is None
+
+
+def test_equal_fixes_and_harms_do_not_qualify_the_rule_is_dropped():
+    nei = "NOT_ENOUGH_INFO"
+    records = [record("SUPPORT", nei, 0.99, "SUPPORT"), record(nei, nei, 0.99, "SUPPORT")]  # one fix, one harm
+    result = simulate_nei_tau(records, grid=(0.5, 0.9))
+    assert result["table"]["0.5"]["net"] == 0 and result["tau"] is None
+
+
+def test_the_default_grid_is_the_five_decided_thresholds():
+    from agentrag.verify.experiment import NEI_TAU_GRID
+
+    assert NEI_TAU_GRID == (0.5, 0.7, 0.9, 0.95, 0.98)

@@ -130,3 +130,42 @@ def test_a_ledger_that_cannot_be_written_at_all_keeps_counting_in_memory(tmp_pat
     limiter.acquire()
     limiter.settle(0.01)
     assert limiter.ledger.lifetime() == {"calls": 1, "usd": 0.01}
+
+
+def test_a_phase_cap_counts_from_the_phase_start_and_survives_a_restart(tmp_path):
+    from agentrag.verify.budget import Budget, BudgetExceeded
+
+    budget = Budget(max_calls=None, max_inr=None, inr_per_usd=100.0, reserve_usd=0.5)  # Rs 100 per dollar
+    ft = FakeTime()
+
+    def limiter():
+        return RateLimiter(Limits(rpm=None, tpm=None), tmp_path / "l.json", budget=budget, clock=ft.clock,
+                           sleep=ft.sleep, day_fn=lambda: "d")
+
+    first = limiter()
+    first.acquire()
+    first.settle(2.0)  # spend before the phase: Rs 200, not counted against it
+    info = first.start_phase("train-finish", cap_inr=100.0)  # a $1.00 allowance
+    assert info["started_at_inr"] == pytest.approx(200.0)
+    first.acquire()
+    first.settle(0.4)
+
+    restarted = limiter()
+    restarted.start_phase("train-finish", cap_inr=100.0)  # same baseline, not reset by the restart
+    restarted.acquire()
+    restarted.settle(0.4)  # phase spend now $0.80
+    with pytest.raises(BudgetExceeded, match="phase cap reached for 'train-finish'"):
+        restarted.acquire()  # 0.80 + 0.5 reserve would cross the $1.00 allowance
+
+
+def test_reservations_count_against_the_cap_before_a_request_settles(tmp_path):
+    from agentrag.verify.budget import Budget, BudgetExceeded
+
+    budget = Budget(max_calls=None, max_inr=1.0, inr_per_usd=1.0, reserve_usd=0.4)  # $1.00 total
+    limiter = RateLimiter(Limits(rpm=None, tpm=None), None, budget=budget, day_fn=lambda: "d")
+    limiter.acquire()
+    limiter.acquire()  # two in flight: 0.8 reserved
+    with pytest.raises(BudgetExceeded):
+        limiter.acquire()  # a third would reserve past the cap
+    limiter.settle(0.01)
+    limiter.acquire()  # a settled call frees its reservation

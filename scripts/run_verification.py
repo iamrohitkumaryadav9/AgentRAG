@@ -165,6 +165,8 @@ def build_client(args, offline: bool) -> tuple[GeminiClient, ResponseCache, Budg
     # one ledger per API key: a new key (project, quota, credits) never inherits another project's totals
     limiter = RateLimiter(limits, ledger_path_for_key(key) if key else None, budget=budget)
     transport = None if offline else GenaiTransport(MODEL, key)
+    if args.phase:
+        print("phase:", limiter.start_phase(args.phase, args.phase_cap_inr))
     client = GeminiClient(MODEL, cache, limiter, transport, thinking=args.thinking)
     return client, cache, budget
 
@@ -179,7 +181,8 @@ def current_config(args) -> dict:
         "nei_recheck_tau": nei_tau_value(args),
         "nei_recheck": "NLI over every retrieved sentence; flag a NOT_ENOUGH_INFO verdict if entail or contradict "
                        "probability > tau and retry once with feedback naming the sentence",
-        "max_thinking_tokens_per_call": budget_from_env().max_thinking_tokens,
+        "tripwire_usd_per_call": budget_from_env().tripwire_usd,
+        "thinking_tokens": "logged and reported per arm; not a stop condition",
         "failure_policy_reported": ["keep", "abstain"], "primary_failure_policy": "keep",
         "retrieval": "hybrid-bge (BM25 + bge-small-en-v1.5, RRF k=60, depth 100)",
     }
@@ -371,6 +374,10 @@ def run_stage(args) -> int:
                   f"flagged {retry['flagged']} fixed {retry['fixed']} harmed {retry['harmed']} "
                   f"| on NEI verdicts: flagged {on_nei.get('flagged', 0)} fixed {on_nei.get('fixed', 0)} "
                   f"harmed {on_nei.get('harmed', 0)} | api calls total {m['usage']['api_calls_total']}", flush=True)
+            u = m["usage"]
+            print(f"   cost per LLM call: max ${u['max_call_usd']:.4f} mean ${u['mean_call_usd']:.4f} | thinking: "
+                  f"max {u['max_thought_tokens']} mean/call {u['mean_thought_tokens_per_call']:.1f} "
+                  f"({u['calls_with_thinking']} calls used thinking)", flush=True)
 
         if "oracle" in arms:
             oracle_graph = build_verify_graph(judge, None, args.max_attempts)
@@ -481,6 +488,8 @@ def main() -> int:
     p.add_argument("--thinking", choices=THINKING_LEVELS, default="low")
     p.add_argument("--workers", type=int, default=6, help="concurrent claims (1-8)")
     p.add_argument("--rpm", type=int, default=60, help="client-side requests per minute (paid-tier guess)")
+    p.add_argument("--phase", default=None, help="name of the study phase whose spend is capped (ledger-backed)")
+    p.add_argument("--phase-cap-inr", type=float, default=None, help="rupee cap for --phase, from its first use")
     p.add_argument("--offline", action="store_true", help="cache only; any uncached request is an error")
     p.add_argument("--max-calls", type=int, default=None, help="extra cap on API requests for this run")
     p.add_argument("--validation-gold", type=int, default=0, help="LLM-checker items from gold rationales")

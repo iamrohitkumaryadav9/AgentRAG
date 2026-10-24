@@ -324,7 +324,7 @@ class GeminiClient:
             reason = (
                 f"tripwire: one call cost ${cost:.4f}, above the ${budget.tripwire_usd:.4f} limit ({response.label})"
             )
-        elif response.thought_tokens > budget.max_thinking_tokens:
+        elif budget.max_thinking_tokens is not None and response.thought_tokens > budget.max_thinking_tokens:
             reason = (
                 f"tripwire: {response.thought_tokens} thinking tokens in one call, above the "
                 f"{budget.max_thinking_tokens} limit (thinking={self.thinking!r})"

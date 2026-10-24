@@ -102,6 +102,15 @@ def usage_summary(outcomes: Sequence[ClaimOutcome]) -> dict:
         "thought_tokens_per_claim": sum(u.thought_tokens for u in usages) / n,
         "paid_equivalent_usd_total": sum(u.cost_usd for u in usages),
         "paid_equivalent_usd_per_claim": sum(u.cost_usd for u in usages) / n,
+        # per-call cost and thinking (logged, not a stop condition); LLM responses only, NLI checks are free
+        "llm_calls_total": sum(u.llm_calls for u in usages),
+        "max_call_usd": max((u.max_call_usd for u in usages), default=0.0),
+        "mean_call_usd": sum(u.cost_usd for u in usages) / max(1, sum(u.llm_calls for u in usages)),
+        "max_thought_tokens": max((u.max_thought_tokens for u in usages), default=0),
+        "mean_thought_tokens_per_call": (
+            sum(u.thought_tokens for u in usages) / max(1, sum(u.llm_calls for u in usages))
+        ),
+        "calls_with_thinking": sum(u.thought_calls for u in usages),
         "api_latency_ms_per_claim_mean": statistics.fmean(latencies) if latencies else 0.0,
         "api_latency_ms_per_claim_p50": _percentile(latencies, 0.5),
         "api_latency_ms_per_claim_p95": _percentile(latencies, 0.95),
@@ -215,7 +224,7 @@ def tune_nli_only_tau(
 
 # -- the NOT_ENOUGH_INFO recheck: choosing its threshold from stored retry outcomes ----------------
 
-NEI_TAU_GRID = (0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 0.98)
+NEI_TAU_GRID = (0.5, 0.7, 0.9, 0.95, 0.98)
 NEI = "NOT_ENOUGH_INFO"
 
 
@@ -227,9 +236,9 @@ def simulate_nei_tau(records: Sequence[Mapping], grid: Sequence[float] = NEI_TAU
     threshold, so the retry outcome for every stricter threshold is already stored: no further API calls.
 
     A *fix* is a claim the judge wrongly answered NOT_ENOUGH_INFO whose retry ended on the gold verdict; a *harm* is
-    a correct NOT_ENOUGH_INFO whose retry ended on anything else. The chosen threshold has the best net
-    (fixes - harms) among those with harms <= fixes and at least one fix; ties go to the stricter threshold. If none
-    qualifies the rule should be left off (``tau`` is None).
+    a correct NOT_ENOUGH_INFO whose retry ended on anything else. The chosen threshold maximises net (fixes - harms)
+    subject to fixes > harms, strictly; ties go to the stricter threshold. If none qualifies the rule is dropped
+    (``tau`` is None) and reported as a negative result.
     """
     table: dict[float, dict] = {}
     for tau in grid:
@@ -247,7 +256,7 @@ def simulate_nei_tau(records: Sequence[Mapping], grid: Sequence[float] = NEI_TAU
             elif record["gold"] == NEI and final != NEI:
                 harmed += 1
         table[tau] = {"flagged": flagged, "fixed": fixed, "harmed": harmed, "net": fixed - harmed}
-    eligible = [t for t in grid if table[t]["fixed"] > 0 and table[t]["harmed"] <= table[t]["fixed"]]
+    eligible = [t for t in grid if table[t]["fixed"] > table[t]["harmed"]]
     chosen = max(eligible, key=lambda t: (table[t]["net"], t)) if eligible else None
     nei_records = [r for r in records if r["initial"] == NEI]
     return {

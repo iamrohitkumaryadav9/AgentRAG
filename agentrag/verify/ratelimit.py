@@ -145,6 +145,15 @@ class Ledger:
         with self._lock:
             return dict(self._data["lifetime"])
 
+    def phase_start(self, name: str) -> float:
+        """Lifetime spend (USD) when ``name`` began; recorded on first use so a resumed run keeps its baseline."""
+        with self._lock:
+            phases = self._data.setdefault("phases", {})
+            if name not in phases:
+                phases[name] = self._data["lifetime"]["usd"]
+                self._save()
+            return phases[name]
+
     def exhausted_today(self) -> bool:
         with self._lock:
             return bool(self._data["exhausted"].get(self._day_fn(), False))
@@ -174,6 +183,7 @@ class RateLimiter:
         self._window: deque[list] = deque()  # [timestamp, tokens]
         self._cooldown_until = 0.0
         self._reserved_usd = 0.0
+        self._phase: tuple[str, float, float] | None = None  # (name, absolute USD cap, cap in INR)
         self._lock = threading.RLock()
         self.calls_this_run = 0
         self.ledger = Ledger(ledger_path, day_fn or (lambda: pacific_day(wall())))
@@ -215,7 +225,7 @@ class RateLimiter:
                     self.calls_this_run += 1
                     self.ledger.increment()
                     if self.budget is not None:
-                        self._reserved_usd += self.budget.tripwire_usd  # worst case for one call
+                        self._reserved_usd += self.budget.reserve_usd
                     return entry
             self._sleep(wait + 0.01)  # never sleep while holding the lock
 
@@ -230,7 +240,7 @@ class RateLimiter:
         """Release one request's spend reservation and charge what it actually cost."""
         with self._lock:
             if self.budget is not None:
-                self._reserved_usd = max(0.0, self._reserved_usd - self.budget.tripwire_usd)
+                self._reserved_usd = max(0.0, self._reserved_usd - self.budget.reserve_usd)
             if actual_usd:
                 self.ledger.add_spend(actual_usd)
 
@@ -241,6 +251,15 @@ class RateLimiter:
 
     def exhaust_today(self, detail: str = "") -> None:
         self.ledger.mark_exhausted(detail)
+
+    def start_phase(self, name: str, cap_inr: float) -> dict:
+        """Bound the spend of one stage of the study. The phase's starting spend is recorded in the ledger the first
+        time the phase is named, so a resumed run keeps counting from the same baseline."""
+        if self.budget is None:
+            raise ValueError("phase caps need a budget (for the rupee conversion)")
+        start = self.ledger.phase_start(name)
+        self._phase = (name, start + cap_inr / self.budget.inr_per_usd, cap_inr)
+        return {"phase": name, "started_at_inr": self.budget.inr(start), "cap_inr": cap_inr}
 
     def spend_summary(self) -> dict:
         life = self.ledger.lifetime()
@@ -269,7 +288,11 @@ class RateLimiter:
             life = self.ledger.lifetime()
             if budget.max_calls is not None and life["calls"] >= budget.max_calls:
                 raise BudgetExceeded(f"call cap reached ({life['calls']} of {budget.max_calls} requests)")
-            if budget.max_usd is not None and life["usd"] + self._reserved_usd + budget.tripwire_usd > budget.max_usd:
+            if self._phase is not None:
+                name, cap_usd, cap_inr = self._phase
+                if life["usd"] + self._reserved_usd + budget.reserve_usd > cap_usd:
+                    raise BudgetExceeded(f"phase cap reached for '{name}' (Rs {cap_inr:.0f} for this phase)")
+            if budget.max_usd is not None and life["usd"] + self._reserved_usd + budget.reserve_usd > budget.max_usd:
                 raise BudgetExceeded(
                     f"spend cap reached (Rs {budget.inr(life['usd']):.2f} spent, Rs {budget.max_inr:.0f} cap)"
                 )
